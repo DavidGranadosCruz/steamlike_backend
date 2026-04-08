@@ -7,6 +7,7 @@ from .models import LibraryEntry
 
 class PruebasApiCrearEntradaBiblioteca(TestCase):
     ruta = "/api/library/entries/"
+    mensaje_error_validacion = "Datos de entrada inválidos"
 
     def _postear(self, datos):
         return self.client.post(
@@ -14,6 +15,21 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
             data=json.dumps(datos),
             content_type="application/json",
         )
+
+    def _assert_error_validacion(
+        self, respuesta, detalles_esperados: dict[str, str] | None = None
+    ):
+        self.assertEqual(respuesta.status_code, 400)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["error"], "validation_error")
+        self.assertEqual(cuerpo["message"], self.mensaje_error_validacion)
+        self.assertIn("details", cuerpo)
+
+        if detalles_esperados is None:
+            return
+
+        for campo, motivo in detalles_esperados.items():
+            self.assertEqual(cuerpo["details"].get(campo), motivo)
 
     def test_devuelve_201_cuando_el_payload_es_valido(self):
         datos = {
@@ -36,7 +52,17 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
 
     def test_devuelve_400_cuando_el_body_es_objeto_vacio(self):
         respuesta = self._postear({})
-        self.assertEqual(respuesta.status_code, 400)
+        self._assert_error_validacion(
+            respuesta, {"body": "El JSON no puede estar vacío."}
+        )
+
+    def test_devuelve_400_cuando_el_json_esta_mal_formado(self):
+        respuesta = self.client.post(
+            self.ruta,
+            data='{"external_game_id":',
+            content_type="application/json",
+        )
+        self._assert_error_validacion(respuesta, {"body": "JSON mal formado."})
 
     def test_devuelve_400_cuando_status_no_es_string(self):
         datos = {
@@ -46,7 +72,7 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
         }
 
         respuesta = self._postear(datos)
-        self.assertEqual(respuesta.status_code, 400)
+        self._assert_error_validacion(respuesta, {"status": "Debe ser string."})
 
     def test_devuelve_400_cuando_status_no_esta_permitido(self):
         datos = {
@@ -56,7 +82,10 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
         }
 
         respuesta = self._postear(datos)
-        self.assertEqual(respuesta.status_code, 400)
+        self._assert_error_validacion(
+            respuesta,
+            {"status": "Debe ser uno de: wishlist, playing, completed, dropped."},
+        )
 
     def test_devuelve_400_cuando_hours_played_no_es_integer(self):
         datos = {
@@ -66,7 +95,7 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
         }
 
         respuesta = self._postear(datos)
-        self.assertEqual(respuesta.status_code, 400)
+        self._assert_error_validacion(respuesta, {"hours_played": "Debe ser integer."})
 
     def test_devuelve_400_cuando_hours_played_es_negativo(self):
         datos = {
@@ -76,7 +105,9 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
         }
 
         respuesta = self._postear(datos)
-        self.assertEqual(respuesta.status_code, 400)
+        self._assert_error_validacion(
+            respuesta, {"hours_played": "Debe ser mayor o igual que 0."}
+        )
 
     def test_devuelve_400_cuando_hours_played_es_bool(self):
         datos = {
@@ -86,4 +117,16 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
         }
 
         respuesta = self._postear(datos)
-        self.assertEqual(respuesta.status_code, 400)
+        self._assert_error_validacion(respuesta, {"hours_played": "Debe ser integer."})
+
+    def test_devuelve_400_cuando_faltan_campos_obligatorios(self):
+        datos = {"status": "playing"}
+        respuesta = self._postear(datos)
+
+        self._assert_error_validacion(
+            respuesta,
+            {
+                "external_game_id": "Campo obligatorio.",
+                "hours_played": "Campo obligatorio.",
+            },
+        )

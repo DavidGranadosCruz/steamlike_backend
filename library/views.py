@@ -15,8 +15,26 @@ def health(request):
     return JsonResponse({"status": "ok"})
 
 
-def _respuesta_error(mensaje: str) -> JsonResponse:
-    return JsonResponse({"error": mensaje}, status=400)
+def _respuesta_error_validacion(detalles: dict[str, str]) -> JsonResponse:
+    return JsonResponse(
+        {
+            "error": "validation_error",
+            "message": "Datos de entrada inválidos",
+            "details": detalles,
+        },
+        status=400,
+    )
+
+
+def _respuesta_error_duplicado(detalles: dict[str, str]) -> JsonResponse:
+    return JsonResponse(
+        {
+            "error": "duplicate_entry",
+            "message": "Ya existe una entrada con esos datos únicos.",
+            "details": detalles,
+        },
+        status=400,
+    )
 
 
 @csrf_exempt
@@ -26,41 +44,45 @@ def crear_entrada_biblioteca(request):
         cuerpo = request.body.decode("utf-8") if request.body else ""
         datos = json.loads(cuerpo or "{}")
     except (UnicodeDecodeError, json.JSONDecodeError):
-        return _respuesta_error("El cuerpo JSON no es valido.")
+        return _respuesta_error_validacion({"body": "JSON mal formado."})
 
     if not isinstance(datos, dict):
-        return _respuesta_error("El cuerpo JSON debe ser un objeto.")
+        return _respuesta_error_validacion({"body": "El JSON debe ser un objeto."})
 
     if datos == {}:
-        return _respuesta_error("El cuerpo JSON no puede estar vacio.")
+        return _respuesta_error_validacion({"body": "El JSON no puede estar vacío."})
 
     campos_obligatorios = ("external_game_id", "status", "hours_played")
-    campos_faltantes = [campo for campo in campos_obligatorios if campo not in datos]
-    if campos_faltantes:
-        return _respuesta_error(
-            f"Faltan campos obligatorios: {', '.join(campos_faltantes)}"
-        )
+    detalles_errores: dict[str, str] = {}
+    for campo in campos_obligatorios:
+        if campo not in datos:
+            detalles_errores[campo] = "Campo obligatorio."
 
     external_game_id = datos.get("external_game_id")
     status = datos.get("status")
     hours_played = datos.get("hours_played")
 
-    if not isinstance(external_game_id, str):
-        return _respuesta_error("external_game_id debe ser un string.")
+    if "external_game_id" not in detalles_errores and not isinstance(
+        external_game_id, str
+    ):
+        detalles_errores["external_game_id"] = "Debe ser string."
 
-    if not isinstance(status, str):
-        return _respuesta_error("status debe ser un string.")
+    if "status" not in detalles_errores:
+        if not isinstance(status, str):
+            detalles_errores["status"] = "Debe ser string."
+        elif status not in LibraryEntry.ALLOWED_STATUSES:
+            detalles_errores["status"] = (
+                "Debe ser uno de: wishlist, playing, completed, dropped."
+            )
 
-    if status not in LibraryEntry.ALLOWED_STATUSES:
-        return _respuesta_error(
-            "status debe ser uno de estos valores: wishlist, playing, completed, dropped."
-        )
+    if "hours_played" not in detalles_errores:
+        if isinstance(hours_played, bool) or not isinstance(hours_played, int):
+            detalles_errores["hours_played"] = "Debe ser integer."
+        elif hours_played < 0:
+            detalles_errores["hours_played"] = "Debe ser mayor o igual que 0."
 
-    if isinstance(hours_played, bool) or not isinstance(hours_played, int):
-        return _respuesta_error("hours_played debe ser un integer.")
-
-    if hours_played < 0:
-        return _respuesta_error("hours_played debe ser mayor o igual que 0.")
+    if detalles_errores:
+        return _respuesta_error_validacion(detalles_errores)
 
     try:
         entrada = LibraryEntry.objects.create(
@@ -69,8 +91,8 @@ def crear_entrada_biblioteca(request):
             hours_played=hours_played,
         )
     except IntegrityError:
-        return _respuesta_error(
-            "Ya existe una entrada de biblioteca con ese external_game_id."
+        return _respuesta_error_duplicado(
+            {"external_game_id": "Ya existe una entrada con ese identificador."}
         )
 
     return JsonResponse(

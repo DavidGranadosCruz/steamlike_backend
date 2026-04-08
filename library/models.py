@@ -17,8 +17,6 @@ class LibraryEntry(models.Model):
     status = models.CharField(max_length=20, default=STATUS_WISHLIST)
     hours_played = models.IntegerField(default=0)
 
-    # --- Simple methods for easy unit tests (not used by the exercises) ---
-
     def external_id_length(self) -> int:
         return len(self.external_game_id or "")
 
