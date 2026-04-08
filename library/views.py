@@ -4,6 +4,7 @@ import json
 
 from django.db import IntegrityError
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import LibraryEntry
@@ -15,10 +16,10 @@ def health(request):
 
 
 def _respuesta_error(mensaje: str) -> JsonResponse:
-    # NOTA: este payload se puede adaptar en el ejercicio 2 al contrato final.
     return JsonResponse({"error": mensaje}, status=400)
 
 
+@csrf_exempt
 @require_POST
 def crear_entrada_biblioteca(request):
     try:
