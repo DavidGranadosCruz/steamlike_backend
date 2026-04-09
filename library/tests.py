@@ -1,4 +1,4 @@
-import json
+﻿import json
 
 from django.test import TestCase
 
@@ -7,7 +7,7 @@ from .models import LibraryEntry
 
 class PruebasApiCrearEntradaBiblioteca(TestCase):
     ruta = "/api/library/entries/"
-    mensaje_error_validacion = "Datos de entrada inválidos"
+    mensaje_error_validacion = "Datos de entrada invalidos"
 
     def _postear(self, datos):
         return self.client.post(
@@ -16,9 +16,7 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
             content_type="application/json",
         )
 
-    def _assert_error_validacion(
-        self, respuesta, detalles_esperados: dict[str, str] | None = None
-    ):
+    def _assert_error_validacion(self, respuesta, detalles_esperados=None):
         self.assertEqual(respuesta.status_code, 400)
         cuerpo = respuesta.json()
         self.assertEqual(cuerpo["error"], "validation_error")
@@ -53,7 +51,7 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
     def test_devuelve_400_cuando_el_body_es_objeto_vacio(self):
         respuesta = self._postear({})
         self._assert_error_validacion(
-            respuesta, {"body": "El JSON no puede estar vacío."}
+            respuesta, {"body": "El JSON no puede estar vacio."}
         )
 
     def test_devuelve_400_cuando_el_json_esta_mal_formado(self):
