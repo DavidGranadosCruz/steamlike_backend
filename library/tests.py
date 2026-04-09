@@ -154,3 +154,81 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
             LibraryEntry.objects.filter(external_game_id="steam-duplicate-1").count(),
             1,
         )
+
+
+class PruebasApiListadoYDetalleBiblioteca(TestCase):
+    ruta_listado = "/api/library/entries/"
+    mensaje_not_found = "La entrada solicitada no existe"
+
+    def setUp(self):
+        # Aqui preparo 2 entradas para probar listado y detalle.
+        self.entrada_1 = LibraryEntry.objects.create(
+            external_game_id="steam-list-1",
+            status="playing",
+            hours_played=5,
+        )
+        self.entrada_2 = LibraryEntry.objects.create(
+            external_game_id="steam-list-2",
+            status="wishlist",
+            hours_played=0,
+        )
+
+    def test_listado_devuelve_200_con_formato_esperado(self):
+        respuesta = self.client.get(self.ruta_listado)
+
+        self.assertEqual(respuesta.status_code, 200)
+        cuerpo = respuesta.json()
+        self.assertEqual(len(cuerpo), 2)
+
+        esperado = [
+            {
+                "id": self.entrada_1.id,
+                "external_game_id": "steam-list-1",
+                "status": "playing",
+                "hours_played": 5,
+            },
+            {
+                "id": self.entrada_2.id,
+                "external_game_id": "steam-list-2",
+                "status": "wishlist",
+                "hours_played": 0,
+            },
+        ]
+        self.assertEqual(cuerpo, esperado)
+
+        for item in cuerpo:
+            self.assertEqual(
+                set(item.keys()),
+                {"id", "external_game_id", "status", "hours_played"},
+            )
+
+    def test_detalle_existente_devuelve_200_con_formato_esperado(self):
+        respuesta = self.client.get(f"{self.ruta_listado}{self.entrada_1.id}/")
+
+        self.assertEqual(respuesta.status_code, 200)
+        cuerpo = respuesta.json()
+        self.assertEqual(
+            set(cuerpo.keys()),
+            {"id", "external_game_id", "status", "hours_played"},
+        )
+        self.assertEqual(
+            cuerpo,
+            {
+                "id": self.entrada_1.id,
+                "external_game_id": "steam-list-1",
+                "status": "playing",
+                "hours_played": 5,
+            },
+        )
+
+    def test_detalle_inexistente_devuelve_404_con_json_exacto(self):
+        respuesta = self.client.get(f"{self.ruta_listado}999999/")
+
+        self.assertEqual(respuesta.status_code, 404)
+        self.assertEqual(
+            respuesta.json(),
+            {
+                "error": "not_found",
+                "message": self.mensaje_not_found,
+            },
+        )
