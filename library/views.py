@@ -1,6 +1,6 @@
 ﻿import json
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -28,7 +28,7 @@ def error_duplicado(details):
     return JsonResponse(
         {
             "error": "duplicate_entry",
-            "message": "Ya existe una entrada con esos datos unicos.",
+            "message": "El juego ya existe en la biblioteca",
             "details": details,
         },
         status=400,
@@ -83,14 +83,15 @@ def crear_entrada_biblioteca(request):
         return error_validacion(details)
 
     try:
-        entrada = LibraryEntry.objects.create(
-            external_game_id=data["external_game_id"],
-            status=data["status"],
-            hours_played=data["hours_played"],
-        )
+        with transaction.atomic():
+            entrada = LibraryEntry.objects.create(
+                external_game_id=data["external_game_id"],
+                status=data["status"],
+                hours_played=data["hours_played"],
+            )
     except IntegrityError:
         return error_duplicado(
-            {"external_game_id": "Ya existe una entrada con ese identificador."}
+            {"external_game_id": "duplicate"}
         )
 
     return JsonResponse(

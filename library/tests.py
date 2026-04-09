@@ -8,6 +8,7 @@ from .models import LibraryEntry
 class PruebasApiCrearEntradaBiblioteca(TestCase):
     ruta = "/api/library/entries/"
     mensaje_error_validacion = "Datos de entrada invalidos"
+    mensaje_error_duplicado = "El juego ya existe en la biblioteca"
 
     def _postear(self, datos):
         return self.client.post(
@@ -28,6 +29,13 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
 
         for campo, motivo in detalles_esperados.items():
             self.assertEqual(cuerpo["details"].get(campo), motivo)
+
+    def _assert_error_duplicado(self, respuesta):
+        self.assertEqual(respuesta.status_code, 400)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["error"], "duplicate_entry")
+        self.assertEqual(cuerpo["message"], self.mensaje_error_duplicado)
+        self.assertEqual(cuerpo["details"], {"external_game_id": "duplicate"})
 
     def test_devuelve_201_cuando_el_payload_es_valido(self):
         datos = {
@@ -127,4 +135,22 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
                 "external_game_id": "Campo obligatorio.",
                 "hours_played": "Campo obligatorio.",
             },
+        )
+
+    def test_devuelve_400_cuando_external_game_id_esta_duplicado(self):
+        datos = {
+            "external_game_id": "steam-duplicate-1",
+            "status": "playing",
+            "hours_played": 2,
+        }
+
+        primera_respuesta = self._postear(datos)
+        self.assertEqual(primera_respuesta.status_code, 201)
+
+        segunda_respuesta = self._postear(datos)
+        self._assert_error_duplicado(segunda_respuesta)
+
+        self.assertEqual(
+            LibraryEntry.objects.filter(external_game_id="steam-duplicate-1").count(),
+            1,
         )
