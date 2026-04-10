@@ -232,3 +232,90 @@ class PruebasApiListadoYDetalleBiblioteca(TestCase):
                 "message": self.mensaje_not_found,
             },
         )
+
+
+class PruebasApiActualizarEntradaBiblioteca(TestCase):
+    ruta_base = "/api/library/entries/"
+    mensaje_error_validacion = "Datos de entrada invalidos"
+    mensaje_not_found = "La entrada solicitada no existe"
+
+    def setUp(self):
+        # Aqui creo una entrada base para probar PATCH.
+        self.entrada = LibraryEntry.objects.create(
+            external_game_id="steam-patch-1",
+            status="wishlist",
+            hours_played=0,
+        )
+
+    def _patchear(self, entry_id, datos):
+        return self.client.patch(
+            f"{self.ruta_base}{entry_id}/",
+            data=json.dumps(datos),
+            content_type="application/json",
+        )
+
+    def _assert_error_validacion(self, respuesta, detalles_esperados=None):
+        self.assertEqual(respuesta.status_code, 400)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["error"], "validation_error")
+        self.assertEqual(cuerpo["message"], self.mensaje_error_validacion)
+        self.assertIn("details", cuerpo)
+
+        if detalles_esperados is None:
+            return
+
+        for campo, motivo in detalles_esperados.items():
+            self.assertEqual(cuerpo["details"].get(campo), motivo)
+
+    def test_patch_devuelve_200_cuando_el_payload_es_valido(self):
+        respuesta = self._patchear(
+            self.entrada.id,
+            {"status": "playing", "hours_played": 7},
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["id"], self.entrada.id)
+        self.assertEqual(cuerpo["external_game_id"], "steam-patch-1")
+        self.assertEqual(cuerpo["status"], "playing")
+        self.assertEqual(cuerpo["hours_played"], 7)
+
+        self.entrada.refresh_from_db()
+        self.assertEqual(self.entrada.status, "playing")
+        self.assertEqual(self.entrada.hours_played, 7)
+
+    def test_patch_devuelve_400_cuando_body_vacio(self):
+        respuesta = self._patchear(self.entrada.id, {})
+        self._assert_error_validacion(
+            respuesta, {"body": "El JSON no puede estar vacio."}
+        )
+
+    def test_patch_devuelve_400_cuando_status_invalido(self):
+        respuesta = self._patchear(self.entrada.id, {"status": "paused"})
+        self._assert_error_validacion(
+            respuesta,
+            {"status": "Debe ser uno de: wishlist, playing, completed, dropped."},
+        )
+
+    def test_patch_devuelve_400_cuando_hours_played_es_negativo(self):
+        respuesta = self._patchear(self.entrada.id, {"hours_played": -5})
+        self._assert_error_validacion(
+            respuesta, {"hours_played": "Debe ser mayor o igual que 0."}
+        )
+
+    def test_patch_devuelve_400_cuando_llega_campo_desconocido(self):
+        respuesta = self._patchear(self.entrada.id, {"titulo": "nuevo titulo"})
+        self._assert_error_validacion(
+            respuesta, {"titulo": "Campo no permitido."}
+        )
+
+    def test_patch_devuelve_404_cuando_id_no_existe(self):
+        respuesta = self._patchear(999999, {"status": "playing"})
+        self.assertEqual(respuesta.status_code, 404)
+        self.assertEqual(
+            respuesta.json(),
+            {
+                "error": "not_found",
+                "message": self.mensaje_not_found,
+            },
+        )

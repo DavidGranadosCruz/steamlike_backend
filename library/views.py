@@ -14,7 +14,7 @@ def health(request):
 
 
 def serializar_entrada(entrada):
-    # Aqui uso un formato unico para create listado y detalle.
+    # Aqui uso un formato unico para create, listado y detalle.
     return {
         "id": entrada.id,
         "external_game_id": entrada.external_game_id,
@@ -24,7 +24,7 @@ def serializar_entrada(entrada):
 
 
 def error_validacion(details):
-    # Devolver errores 400 de validacion.
+    # Esto ya lo tenia de antes para devolver 400 de validacion.
     return JsonResponse(
         {
             "error": "validation_error",
@@ -36,7 +36,7 @@ def error_validacion(details):
 
 
 def error_duplicado(details):
-    # Para cuando intentan meter un juego duplicado.
+    # Esto ya lo tenia de antes para el caso de juego duplicado.
     return JsonResponse(
         {
             "error": "duplicate_entry",
@@ -48,7 +48,7 @@ def error_duplicado(details):
 
 
 def error_no_encontrado():
-    # Esto lo agrego para el detalle cuando el id no existe.
+    # Esto lo agregue antes para responder claro cuando el id no existe.
     return JsonResponse(
         {
             "error": "not_found",
@@ -59,7 +59,7 @@ def error_no_encontrado():
 
 
 def leer_json(request):
-    # leer JSON
+    # Leo el body como JSON de forma simple.
     if not request.body:
         return {}
 
@@ -69,39 +69,43 @@ def leer_json(request):
         return None
 
 
+def buscar_entrada(entry_id):
+    # Me ahorro repetir la busqueda de id en detalle y patch.
+    try:
+        return LibraryEntry.objects.get(id=entry_id)
+    except LibraryEntry.DoesNotExist:
+        return None
+
+
 @require_GET
 def listar_entradas_biblioteca(request):
-    # Aqui devuelvo todas las entradas como lista.
+    # Devuelvo todas las entradas como lista.
     entradas = LibraryEntry.objects.order_by("id")
     data = [serializar_entrada(entrada) for entrada in entradas]
     return JsonResponse(data, safe=False, status=200)
 
 
-@require_GET
 def detalle_entrada_biblioteca(request, entry_id):
-    # Aqui busco una entrada por id para devolver su detalle.
-    try:
-        entrada = LibraryEntry.objects.get(id=entry_id)
-    except LibraryEntry.DoesNotExist:
+    # Devuelvo el detalle de una entrada por id.
+    entrada = buscar_entrada(entry_id)
+    if entrada is None:
         return error_no_encontrado()
 
     return JsonResponse(serializar_entrada(entrada), status=200)
 
 
 def crear_entrada_biblioteca(request):
-    # Valido el JSON.
+    # Esto ya lo tenia de antes: valido JSON y campos para crear.
     data = leer_json(request)
     if data is None:
         return error_validacion({"body": "JSON mal formado."})
 
-    # Valido si no es un objeto o esta vacio
     if not isinstance(data, dict):
         return error_validacion({"body": "El JSON debe ser un objeto."})
 
     if data == {}:
         return error_validacion({"body": "El JSON no puede estar vacio."})
 
-# Valido y creo diccionario por si hay algo mal con los datos para devolverlos en el error
     details = {}
 
     if "external_game_id" not in data:
@@ -123,12 +127,10 @@ def crear_entrada_biblioteca(request):
     elif data["hours_played"] < 0:
         details["hours_played"] = "Debe ser mayor o igual que 0."
 
-#Devolver error de validacion si hay algo mal con los datos.
     if details:
         return error_validacion(details)
 
     try:
-        # Esto ya lo tenia de antes para controlar bien el error de duplicado.
         with transaction.atomic():
             entrada = LibraryEntry.objects.create(
                 external_game_id=data["external_game_id"],
@@ -136,17 +138,72 @@ def crear_entrada_biblioteca(request):
                 hours_played=data["hours_played"],
             )
     except IntegrityError:
-        return error_duplicado(
-            {"external_game_id": "duplicate"}
-        )
+        return error_duplicado({"external_game_id": "duplicate"})
 
     return JsonResponse(serializar_entrada(entrada), status=201)
 
-# Vista principal que maneja tanto el listado como la creacion segun el metodo.
+
+def actualizar_entrada_biblioteca(request, entry_id):
+    # Aqui hago el PATCH: solo status y/o hours_played.
+    data = leer_json(request)
+    if data is None:
+        return error_validacion({"body": "JSON mal formado."})
+
+    if not isinstance(data, dict):
+        return error_validacion({"body": "El JSON debe ser un objeto."})
+
+    if data == {}:
+        return error_validacion({"body": "El JSON no puede estar vacio."})
+
+    entrada = buscar_entrada(entry_id)
+    if entrada is None:
+        return error_no_encontrado()
+
+    details = {}
+    campos_permitidos = {"status", "hours_played"}
+
+    for campo in data:
+        if campo not in campos_permitidos:
+            details[campo] = "Campo no permitido."
+
+    if "status" in data:
+        if not isinstance(data["status"], str):
+            details["status"] = "Debe ser string."
+        elif data["status"] not in LibraryEntry.ALLOWED_STATUSES:
+            details["status"] = "Debe ser uno de: wishlist, playing, completed, dropped."
+
+    if "hours_played" in data:
+        if isinstance(data["hours_played"], bool) or not isinstance(data["hours_played"], int):
+            details["hours_played"] = "Debe ser integer."
+        elif data["hours_played"] < 0:
+            details["hours_played"] = "Debe ser mayor o igual que 0."
+
+    if details:
+        return error_validacion(details)
+
+    if "status" in data:
+        entrada.status = data["status"]
+
+    if "hours_played" in data:
+        entrada.hours_played = data["hours_played"]
+
+    entrada.save()
+    return JsonResponse(serializar_entrada(entrada), status=200)
+
+
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def entradas_biblioteca(request):
-    # Aqui uso la misma ruta y segun el metodo hago listado o alta.
+    # En esta ruta hago listado si es GET o alta si es POST.
     if request.method == "GET":
         return listar_entradas_biblioteca(request)
     return crear_entrada_biblioteca(request)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PATCH"])
+def entrada_biblioteca_detalle(request, entry_id):
+    # En detalle hago GET para ver y PATCH para actualizar.
+    if request.method == "GET":
+        return detalle_entrada_biblioteca(request, entry_id)
+    return actualizar_entrada_biblioteca(request, entry_id)
