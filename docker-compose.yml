@@ -24,16 +24,12 @@ services:
       - "8000:8000"
     command: python manage.py runserver 0.0.0.0:8000
 
-
-  #frontend:
-    #build: ../steamlike-frontend
-    #restart: unless-stopped
-    #environment:
-      #API_BASE_URL: http://localhost:8000
-    #depends_on:
-      #- web
-    #ports:
-      #- "3000:80"
+  frontend:
+    image: javier08877/steamlike:2.0
+    ports:
+      - "3000:80"
+    depends_on:
+      - web
 
 volumes:
   postgres_data:
