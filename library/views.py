@@ -1,4 +1,6 @@
-﻿import json
+import json
+
+from django.contrib.auth import get_user_model
 
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
@@ -207,3 +209,46 @@ def entrada_biblioteca_detalle(request, entry_id):
     if request.method == "GET":
         return detalle_entrada_biblioteca(request, entry_id)
     return actualizar_entrada_biblioteca(request, entry_id)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def registrar_usuario(request):
+    data = leer_json(request)
+    if data is None:
+        return error_validacion({"body": "JSON mal formado."})
+
+    if not isinstance(data, dict):
+        return error_validacion({"body": "El JSON debe ser un objeto."})
+
+    if data == {}:
+        return error_validacion({"body": "El JSON no puede estar vacio."})
+
+    details = {}
+
+    if "username" not in data:
+        details["username"] = "Campo obligatorio."
+    elif not isinstance(data["username"], str):
+        details["username"] = "Debe ser string."
+
+    if "password" not in data:
+        details["password"] = "Campo obligatorio."
+    elif not isinstance(data["password"], str):
+        details["password"] = "Debe ser string."
+    elif len(data["password"]) < 8:
+        details["password"] = "La contraseña debe tener mínimo 8 caracteres."
+
+    if details:
+        return error_validacion(details)
+
+    User = get_user_model()
+    # Comprobar si existe el usuario
+    if User.objects.filter(username=data["username"]).exists():
+        return error_validacion({"username": "El username ya está en uso."})
+
+    user = User.objects.create_user(
+        username=data["username"],
+        password=data["password"]
+    )
+
+    return JsonResponse({"id": user.id, "username": user.username}, status=201)

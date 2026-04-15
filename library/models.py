@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 class LibraryEntry(models.Model):
@@ -16,6 +17,14 @@ class LibraryEntry(models.Model):
     external_game_id = models.CharField(max_length=100, unique=True)
     status = models.CharField(max_length=20, default=STATUS_WISHLIST)
     hours_played = models.IntegerField(default=0)
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="library_entries",
+    )
 
     def external_id_length(self) -> int:
         return len(self.external_game_id or "")
