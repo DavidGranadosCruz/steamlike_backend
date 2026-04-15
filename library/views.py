@@ -1,6 +1,6 @@
 import json
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate, login
 
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
@@ -57,6 +57,16 @@ def error_no_encontrado():
             "message": "La entrada solicitada no existe",
         },
         status=404,
+    )
+
+
+def error_no_autorizado(message="No autenticado."):
+    return JsonResponse(
+        {
+            "error": "unauthorized",
+            "message": message,
+        },
+        status=401,
     )
 
 
@@ -242,7 +252,7 @@ def registrar_usuario(request):
         return error_validacion(details)
 
     User = get_user_model()
-    # Comprobar si existe el usuario
+    # Comprobar si existe el usuario y uso objects.filter() para obtener el usuario
     if User.objects.filter(username=data["username"]).exists():
         return error_validacion({"username": "El username ya está en uso."})
 
@@ -252,3 +262,47 @@ def registrar_usuario(request):
     )
 
     return JsonResponse({"id": user.id, "username": user.username}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def iniciar_sesion(request):
+    data = leer_json(request)
+    if data is None:
+        return error_validacion({"body": "JSON mal formado."})
+
+    if not isinstance(data, dict):
+        return error_validacion({"body": "El JSON debe ser un objeto."})
+
+    if data == {}:
+        return error_validacion({"body": "El JSON no puede estar vacio."})
+
+    details = {}
+
+    if "username" not in data:
+        details["username"] = "Campo obligatorio."
+    elif not isinstance(data["username"], str):
+        details["username"] = "Debe ser string."
+
+    if "password" not in data:
+        details["password"] = "Campo obligatorio."
+    elif not isinstance(data["password"], str):
+        details["password"] = "Debe ser string."
+
+    if details:
+        return error_validacion(details)
+
+    user = authenticate(request, username=data["username"], password=data["password"])
+    if user is not None:
+        login(request, user)
+        return JsonResponse({"id": user.id, "username": user.username}, status=200)
+    else:
+        return error_no_autorizado(message="Credenciales incorrectas")
+
+
+@require_GET
+def usuario_actual(request):
+    if request.user.is_authenticated:
+        return JsonResponse({"id": request.user.id, "username": request.user.username}, status=200)
+    else:
+        return error_no_autorizado(message="No autenticado")
