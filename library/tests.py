@@ -1,4 +1,4 @@
-﻿import json
+import json
 
 from django.test import TestCase
 
@@ -232,3 +232,48 @@ class PruebasApiListadoYDetalleBiblioteca(TestCase):
                 "message": self.mensaje_not_found,
             },
         )
+
+
+class PruebasModeloLibraryEntry(TestCase):
+    def test_external_id_upper_convierte_a_mayusculas(self):
+        entrada = LibraryEntry(external_game_id="steam-123")
+        self.assertEqual(entrada.external_id_upper(), "STEAM-123")
+        
+        # Caso limite: None
+        entrada_vacia = LibraryEntry(external_game_id=None)
+        self.assertEqual(entrada_vacia.external_id_upper(), "")
+
+    def test_hours_played_label_asigna_etiqueta_correcta(self):
+        # 0 horas -> "none"
+        entrada_none = LibraryEntry(hours_played=0)
+        self.assertEqual(entrada_none.hours_played_label(), "none")
+        
+        # < 10 horas -> "low"
+        entrada_low = LibraryEntry(hours_played=5)
+        self.assertEqual(entrada_low.hours_played_label(), "low")
+        
+        # >= 10 horas -> "high"
+        entrada_high = LibraryEntry(hours_played=15)
+        self.assertEqual(entrada_high.hours_played_label(), "high")
+
+    def test_status_value_asignaciones_correctas(self):
+        self.assertEqual(LibraryEntry(status=LibraryEntry.STATUS_WISHLIST).status_value(), 0)
+        self.assertEqual(LibraryEntry(status=LibraryEntry.STATUS_PLAYING).status_value(), 1)
+        self.assertEqual(LibraryEntry(status=LibraryEntry.STATUS_COMPLETED).status_value(), 2)
+        self.assertEqual(LibraryEntry(status=LibraryEntry.STATUS_DROPPED).status_value(), 3)
+        self.assertEqual(LibraryEntry(status="inventado").status_value(), -1)
+
+
+class PruebasApiHealth(TestCase):
+    ruta = "/api/health/"
+
+    def test_health_get_devuelve_200_y_json_correcto(self):
+        respuesta = self.client.get(self.ruta)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json(), {"status": "ok"})
+
+    def test_health_metodo_incorrecto_devuelve_405(self):
+        # Se comprueba que falla si enviamos otro metodo HTTP
+        respuesta = self.client.post(self.ruta)
+        self.assertEqual(respuesta.status_code, 405)
+
