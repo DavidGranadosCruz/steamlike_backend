@@ -91,22 +91,31 @@ def buscar_entrada(entry_id):
 
 @require_GET
 def listar_entradas_biblioteca(request):
+    if not request.user.is_authenticated:
+        return error_no_autorizado()
+
     # Devuelvo todas las entradas como lista.
-    entradas = LibraryEntry.objects.order_by("id")
+    entradas = LibraryEntry.objects.filter(user=request.user).order_by("id")
     data = [serializar_entrada(entrada) for entrada in entradas]
     return JsonResponse(data, safe=False, status=200)
 
 
 def detalle_entrada_biblioteca(request, entry_id):
+    if not request.user.is_authenticated:
+        return error_no_autorizado()
+
     # Devuelvo el detalle de una entrada por id.
     entrada = buscar_entrada(entry_id)
-    if entrada is None:
+    if entrada is None or entrada.user != request.user:
         return error_no_encontrado()
 
     return JsonResponse(serializar_entrada(entrada), status=200)
 
 
 def crear_entrada_biblioteca(request):
+    if not request.user.is_authenticated:
+        return error_no_autorizado()
+
     # Esto ya lo tenia de antes: valido JSON y campos para crear.
     data = leer_json(request)
     if data is None:
@@ -145,6 +154,7 @@ def crear_entrada_biblioteca(request):
     try:
         with transaction.atomic():
             entrada = LibraryEntry.objects.create(
+                user=request.user,
                 external_game_id=data["external_game_id"],
                 status=data["status"],
                 hours_played=data["hours_played"],
@@ -156,6 +166,9 @@ def crear_entrada_biblioteca(request):
 
 
 def actualizar_entrada_biblioteca(request, entry_id):
+    if not request.user.is_authenticated:
+        return error_no_autorizado()
+
     # Aqui hago el PATCH: solo status y/o hours_played.
     data = leer_json(request)
     if data is None:
@@ -168,7 +181,7 @@ def actualizar_entrada_biblioteca(request, entry_id):
         return error_validacion({"body": "El JSON no puede estar vacio."})
 
     entrada = buscar_entrada(entry_id)
-    if entrada is None:
+    if entrada is None or entrada.user != request.user:
         return error_no_encontrado()
 
     details = {}
