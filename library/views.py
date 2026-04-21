@@ -15,6 +15,7 @@ def health(request):
     return JsonResponse({"status": "ok"})
 
 
+# Ejercicio 3
 def serializar_entrada(entrada):
     # Aqui uso un formato unico para create, listado y detalle.
     return {
@@ -25,6 +26,7 @@ def serializar_entrada(entrada):
     }
 
 
+# Ejercicio 3
 def error_validacion(details):
     # Esto ya lo tenia de antes para devolver 400 de validacion.
     return JsonResponse(
@@ -37,6 +39,7 @@ def error_validacion(details):
     )
 
 
+# Ejercicio 3
 def error_duplicado(details):
     # Esto ya lo tenia de antes para el caso de juego duplicado.
     return JsonResponse(
@@ -49,6 +52,7 @@ def error_duplicado(details):
     )
 
 
+# Ejercicio 3
 def error_no_encontrado():
     # Esto lo agregue antes para responder claro cuando el id no existe.
     return JsonResponse(
@@ -60,6 +64,7 @@ def error_no_encontrado():
     )
 
 
+# Ejercicio 3
 def error_no_autorizado(message="No autenticado."):
     return JsonResponse(
         {
@@ -70,6 +75,7 @@ def error_no_autorizado(message="No autenticado."):
     )
 
 
+# Ejercicio 3
 def leer_json(request):
     # Leo el body como JSON de forma simple.
     if not request.body:
@@ -81,6 +87,7 @@ def leer_json(request):
         return None
 
 
+# Ejercicio 3
 def buscar_entrada(entry_id):
     # Me ahorro repetir la busqueda de id en detalle y patch.
     try:
@@ -165,6 +172,7 @@ def crear_entrada_biblioteca(request):
     return JsonResponse(serializar_entrada(entrada), status=201)
 
 
+# Ejercicio 5
 def actualizar_entrada_biblioteca(request, entry_id):
     if not request.user.is_authenticated:
         return error_no_autorizado()
@@ -216,6 +224,7 @@ def actualizar_entrada_biblioteca(request, entry_id):
     return JsonResponse(serializar_entrada(entrada), status=200)
 
 
+# Ejercicio 4
 def sustituir_entrada_biblioteca(request, entry_id):
     if not request.user.is_authenticated:
         return error_no_autorizado()
@@ -381,6 +390,7 @@ def usuario_actual(request):
     else:
         return error_no_autorizado(message="No autenticado")
 
+# Ejercicio 2
 @csrf_exempt
 @require_http_methods(["POST"])
 def cambiar_contraseña(request):
@@ -425,6 +435,7 @@ def cambiar_contraseña(request):
     return JsonResponse({"ok": True}, status=200)
 
 
+# Ejercicio 6
 @csrf_exempt
 @require_http_methods(["POST"])
 def cerrar_sesion(request):

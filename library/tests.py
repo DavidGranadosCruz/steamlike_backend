@@ -321,6 +321,7 @@ class PruebasApiActualizarEntradaBiblioteca(TestCase):
 
 from django.contrib.auth import get_user_model
 
+# Ejercicio 4
 class PruebasApiSustituirEntradaBiblioteca(TestCase):
     ruta_base = "/api/library/entries/"
     mensaje_error_validacion = "Datos de entrada invalidos"
@@ -396,6 +397,7 @@ class PruebasApiSustituirEntradaBiblioteca(TestCase):
         self.assertEqual(respuesta_no_existe.status_code, 404)
 
 
+# Ejercicio 6
 class PruebasApiLogout(TestCase):
     ruta_logout = "/api/auth/logout/"
     ruta_me = "/api/users/me/"
@@ -423,3 +425,66 @@ class PruebasApiLogout(TestCase):
         resp_logout = self.client.post(self.ruta_logout)
         self.assertEqual(resp_logout.status_code, 204)
         self.assertFalse(resp_logout.content)
+
+
+# Ejercicio 2
+class PruebasApiCambiarContrasena(TestCase):
+    ruta_cambiar_pass = "/api/users/me/password/"
+
+    def setUp(self):
+        User = get_user_model()
+        self.usuario = User.objects.create_user(username="testuser", password="oldpassword123")
+
+    def _postear(self, datos):
+        return self.client.post(
+            self.ruta_cambiar_pass,
+            data=json.dumps(datos),
+            content_type="application/json",
+        )
+
+    def test_cambio_correcto_devuelve_200(self):
+        self.client.force_login(self.usuario)
+        datos = {
+            "current_password": "oldpassword123",
+            "new_password": "newpassword123"
+        }
+        respuesta = self._postear(datos)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json(), {"ok": True})
+        
+        # Verificar que la contrasena ha cambiado
+        self.usuario.refresh_from_db()
+        self.assertTrue(self.usuario.check_password("newpassword123"))
+
+    def test_devuelve_400_si_contrasena_actual_es_incorrecta(self):
+        self.client.force_login(self.usuario)
+        datos = {
+            "current_password": "wrongpassword",
+            "new_password": "newpassword123"
+        }
+        respuesta = self._postear(datos)
+        self.assertEqual(respuesta.status_code, 400)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["error"], "validation_error")
+
+    def test_devuelve_400_si_contrasena_nueva_es_corta(self):
+        self.client.force_login(self.usuario)
+        datos = {
+            "current_password": "oldpassword123",
+            "new_password": "short"
+        }
+        respuesta = self._postear(datos)
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_devuelve_400_si_json_vacio(self):
+        self.client.force_login(self.usuario)
+        respuesta = self._postear({})
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_devuelve_401_si_no_esta_autenticado(self):
+        datos = {
+            "current_password": "oldpassword123",
+            "new_password": "newpassword123"
+        }
+        respuesta = self._postear(datos)
+        self.assertEqual(respuesta.status_code, 401)
