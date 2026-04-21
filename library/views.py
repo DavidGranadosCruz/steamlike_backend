@@ -1,9 +1,9 @@
 import json
 
-from django.contrib.auth import get_user_model, authenticate, login, update_session_auth_hash
+from django.contrib.auth import get_user_model, authenticate, login, logout, update_session_auth_hash
 
 from django.db import IntegrityError, transaction
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods
 
@@ -216,6 +216,65 @@ def actualizar_entrada_biblioteca(request, entry_id):
     return JsonResponse(serializar_entrada(entrada), status=200)
 
 
+def sustituir_entrada_biblioteca(request, entry_id):
+    if not request.user.is_authenticated:
+        return error_no_autorizado()
+
+    # Aqui leo el body como JSON para el PUT
+    data = leer_json(request)
+    if data is None:
+        return error_validacion({"body": "JSON mal formado."})
+
+    if not isinstance(data, dict):
+        return error_validacion({"body": "El JSON debe ser un objeto."})
+
+    if data == {}:
+        return error_validacion({"body": "El JSON no puede estar vacio."})
+
+    # Busco la entrada y verifico si es del usuario autenticado
+    entrada = buscar_entrada(entry_id)
+    if entrada is None or entrada.user != request.user:
+        return error_no_encontrado()
+
+    details = {}
+
+    # Valido que me lleguen todos los campos obligatorios para el PUT
+    if "external_game_id" not in data:
+        details["external_game_id"] = "Campo obligatorio."
+    elif not isinstance(data["external_game_id"], str):
+        details["external_game_id"] = "Debe ser string."
+
+    if "status" not in data:
+        details["status"] = "Campo obligatorio."
+    elif not isinstance(data["status"], str):
+        details["status"] = "Debe ser string."
+    elif data["status"] not in LibraryEntry.ALLOWED_STATUSES:
+        details["status"] = "Debe ser uno de: wishlist, playing, completed, dropped."
+
+    if "hours_played" not in data:
+        details["hours_played"] = "Campo obligatorio."
+    elif isinstance(data["hours_played"], bool) or not isinstance(data["hours_played"], int):
+        details["hours_played"] = "Debe ser integer."
+    elif data["hours_played"] < 0:
+        details["hours_played"] = "Debe ser mayor o igual que 0."
+
+    if details:
+        return error_validacion(details)
+
+    # Sustituyo por completo los valores anteriores
+    entrada.external_game_id = data["external_game_id"]
+    entrada.status = data["status"]
+    entrada.hours_played = data["hours_played"]
+
+    # Intento guardar, capturando un posible error de id externo duplicado
+    try:
+        entrada.save()
+    except IntegrityError:
+        return error_duplicado({"external_game_id": "duplicate"})
+
+    return JsonResponse(serializar_entrada(entrada), status=200)
+
+
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def entradas_biblioteca(request):
@@ -226,11 +285,13 @@ def entradas_biblioteca(request):
 
 
 @csrf_exempt
-@require_http_methods(["GET", "PATCH"])
+@require_http_methods(["GET", "PATCH", "PUT"])
 def entrada_biblioteca_detalle(request, entry_id):
-    # En detalle hago GET para ver y PATCH para actualizar.
+    # En detalle hago GET para ver, PATCH para actualizar y PUT para sustituir.
     if request.method == "GET":
         return detalle_entrada_biblioteca(request, entry_id)
+    elif request.method == "PUT":
+        return sustituir_entrada_biblioteca(request, entry_id)
     return actualizar_entrada_biblioteca(request, entry_id)
 
 
@@ -362,3 +423,12 @@ def cambiar_contraseña(request):
     update_session_auth_hash(request, request.user)
 
     return JsonResponse({"ok": True}, status=200)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def cerrar_sesion(request):
+    # Si el usuario esta logueado se cierra la sesion, si no, no pasa nada
+    # En ambos casos devolvemos un 204 sin contenido en el body
+    logout(request)
+    return HttpResponse(status=204)

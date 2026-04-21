@@ -1,4 +1,4 @@
-﻿import json
+import json
 
 from django.test import TestCase
 
@@ -310,7 +310,6 @@ class PruebasApiActualizarEntradaBiblioteca(TestCase):
         )
 
     def test_patch_devuelve_404_cuando_id_no_existe(self):
-        respuesta = self._patchear(999999, {"status": "playing"})
         self.assertEqual(respuesta.status_code, 404)
         self.assertEqual(
             respuesta.json(),
@@ -319,3 +318,108 @@ class PruebasApiActualizarEntradaBiblioteca(TestCase):
                 "message": self.mensaje_not_found,
             },
         )
+
+from django.contrib.auth import get_user_model
+
+class PruebasApiSustituirEntradaBiblioteca(TestCase):
+    ruta_base = "/api/library/entries/"
+    mensaje_error_validacion = "Datos de entrada invalidos"
+
+    def setUp(self):
+        User = get_user_model()
+        self.usuario = User.objects.create_user(username="testuser", password="testpassword123")
+        self.otro_usuario = User.objects.create_user(username="otheruser", password="testpassword123")
+
+        self.entrada = LibraryEntry.objects.create(
+            user=self.usuario,
+            external_game_id="steam-put-1",
+            status="wishlist",
+            hours_played=0,
+        )
+
+    def _putear(self, entry_id, datos):
+        return self.client.put(
+            f"{self.ruta_base}{entry_id}/",
+            data=json.dumps(datos),
+            content_type="application/json",
+        )
+
+    def test_put_devuelve_200_y_sustituye_todo(self):
+        self.client.force_login(self.usuario)
+        datos_nuevos = {
+            "external_game_id": "steam-put-2",
+            "status": "completed",
+            "hours_played": 10
+        }
+        respuesta = self._putear(self.entrada.id, datos_nuevos)
+        self.assertEqual(respuesta.status_code, 200)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["external_game_id"], "steam-put-2")
+        self.assertEqual(cuerpo["status"], "completed")
+        self.assertEqual(cuerpo["hours_played"], 10)
+
+    def test_put_devuelve_400_si_faltan_datos(self):
+        self.client.force_login(self.usuario)
+        datos_incompletos = {
+            "status": "playing"
+            # faltan external_game_id y hours_played
+        }
+        respuesta = self._putear(self.entrada.id, datos_incompletos)
+        self.assertEqual(respuesta.status_code, 400)
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo["error"], "validation_error")
+
+    def test_put_devuelve_401_si_no_esta_autenticado(self):
+        # No usamos force_login
+        datos_nuevos = {
+            "external_game_id": "steam-put-3",
+            "status": "completed",
+            "hours_played": 10
+        }
+        respuesta = self._putear(self.entrada.id, datos_nuevos)
+        self.assertEqual(respuesta.status_code, 401)
+
+    def test_put_devuelve_404_si_recurso_es_ajeno_o_no_existe(self):
+        # Logueado como otro usuario
+        self.client.force_login(self.otro_usuario)
+        datos_nuevos = {
+            "external_game_id": "steam-put-4",
+            "status": "completed",
+            "hours_played": 10
+        }
+        respuesta = self._putear(self.entrada.id, datos_nuevos)
+        self.assertEqual(respuesta.status_code, 404)
+
+        # Logueado como dueño pero intentando id inexistente
+        self.client.force_login(self.usuario)
+        respuesta_no_existe = self._putear(99999, datos_nuevos)
+        self.assertEqual(respuesta_no_existe.status_code, 404)
+
+
+class PruebasApiLogout(TestCase):
+    ruta_logout = "/api/auth/logout/"
+    ruta_me = "/api/users/me/"
+
+    def setUp(self):
+        User = get_user_model()
+        self.usuario = User.objects.create_user(username="testuser", password="testpassword123")
+
+    def test_logout_estando_autenticado(self):
+        self.client.force_login(self.usuario)
+        # Comprobar que esta logueado
+        resp_me = self.client.get(self.ruta_me)
+        self.assertEqual(resp_me.status_code, 200)
+
+        # Hacer logout
+        resp_logout = self.client.post(self.ruta_logout)
+        self.assertEqual(resp_logout.status_code, 204)
+        self.assertFalse(resp_logout.content) # body vacio
+
+        # Comprobar que ya no esta logueado
+        resp_me_despues = self.client.get(self.ruta_me)
+        self.assertEqual(resp_me_despues.status_code, 401)
+
+    def test_logout_sin_estar_autenticado(self):
+        resp_logout = self.client.post(self.ruta_logout)
+        self.assertEqual(resp_logout.status_code, 204)
+        self.assertFalse(resp_logout.content)
