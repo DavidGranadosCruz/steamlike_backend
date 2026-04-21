@@ -1,6 +1,6 @@
 import json
 
-from django.contrib.auth import get_user_model, authenticate, login
+from django.contrib.auth import get_user_model, authenticate, login, update_session_auth_hash
 
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
@@ -319,3 +319,46 @@ def usuario_actual(request):
         return JsonResponse({"id": request.user.id, "username": request.user.username}, status=200)
     else:
         return error_no_autorizado(message="No autenticado")
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def cambiar_contraseña(request):
+    if not request.user.is_authenticated:
+        return error_no_autorizado()
+
+    data = leer_json(request)
+    if data is None:
+        return error_validacion({"body": "JSON mal formado."})
+
+    if not isinstance(data, dict):
+        return error_validacion({"body": "El JSON debe ser un objeto."})
+
+    if data == {}:
+        return error_validacion({"body": "El JSON no puede estar vacio."})
+
+    details = {}
+
+    if "current_password" not in data:
+        details["current_password"] = "Campo obligatorio."
+    elif not isinstance(data["current_password"], str):
+        details["current_password"] = "Debe ser string."
+
+    if "new_password" not in data:
+        details["new_password"] = "Campo obligatorio."
+    elif not isinstance(data["new_password"], str):
+        details["new_password"] = "Debe ser string."
+    elif len(data["new_password"]) < 8:
+        details["new_password"] = "La contraseña debe tener mínimo 8 caracteres."
+
+    if details:
+        return error_validacion(details)
+
+    if not request.user.check_password(data["current_password"]):
+        return error_validacion({"current_password": "La contraseña actual es incorrecta."})
+
+    request.user.set_password(data["new_password"])
+    request.user.save()
+    
+    update_session_auth_hash(request, request.user)
+
+    return JsonResponse({"ok": True}, status=200)
