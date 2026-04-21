@@ -1,4 +1,6 @@
 import json
+
+tests_code = """import json
 from django.test import TestCase
 from django.contrib.auth.models import User
 from .models import LibraryEntry
@@ -174,3 +176,8 @@ class PruebasApiHealth(TestCase):
     def test_health_metodo_incorrecto_devuelve_405(self):
         respuesta = self.client.post("/api/health/")
         self.assertEqual(respuesta.status_code, 405)
+"""
+
+with open(r"c:\Users\PC\OneDrive\Escritorio\ILERNA\Entorno servidor\Proyecto\library\tests.py", "w", encoding="utf-8") as f:
+    f.write(tests_code)
+print("done")
