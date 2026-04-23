@@ -1,60 +1,88 @@
 # steamlike_backend
 
-Backend Django para el proyecto que se realizará en DWES de 2º DAW.
+Proyecto con backend Django y frontend React conectado a autenticacion por sesion y biblioteca real.
 
-## Arranque del proyecto
+## Arranque completo (backend + frontend)
 
-### 1) Levantar contenedores
-```
+```bash
 docker compose up --build
 ```
 
-### 2) Migraciones
-Para crear las migraciones:
+Servicios:
+- Frontend: http://localhost:3000
+- Backend Django: http://localhost:8000
+- Admin Django: http://localhost:8000/admin/
+- Health-check: http://localhost:8000/api/health/
+
+## Arranque solo frontend
+
+```bash
+docker compose -f docker-compose.frontend.yml up --build
 ```
+
+Servicio:
+- Frontend: http://localhost:3000
+
+Nota:
+- Este modo solo levanta el cliente. Para login, sesion y biblioteca, el backend debe estar disponible en `http://localhost:8000`.
+
+## Migraciones backend
+
+Crear migraciones:
+
+```bash
 docker compose exec web python manage.py makemigrations
 ```
 
-Para aplicar las migraciones:
-```
+Aplicar migraciones:
+
+```bash
 docker compose exec web python manage.py migrate
 ```
 
-### 3) Crear superusuario (admin)
-```
+Crear superusuario:
+
+```bash
 docker compose exec web python manage.py createsuperuser
 ```
 
-### 4) Abrir el admin
-- Admin: `http://localhost:8000/admin/`
+## Comandos utiles en el contenedor backend
 
-### 5) Health-check
-- `GET http://localhost:8000/health/`
+Entrar en shell:
 
-## Comandos útiles dentro del contenedor
-
-### Entrar en una shell del contenedor web
-```
+```bash
 docker compose exec web bash
 ```
 
-### Crear una nueva app (ej.: auth_api)
-```
+Crear una app Django (ejemplo `auth_api`):
+
+```bash
 docker compose exec web python manage.py startapp auth_api
 ```
 
-> Recuerda: después hay que añadir la app a `INSTALLED_APPS` y crear/incluir sus `urls.py` si aplica.
+## Variables de entorno
 
-## Variables de entorno (.env)
-El proyecto carga variables desde `.env` (usado por `docker-compose.yml`).  
-En desarrollo, por defecto CORS permite:
-- `http://frontend:3000`
-- `http://localhost:3000`
+El proyecto usa `.env` a traves de `docker-compose.yml` para el backend.
 
-Si cambias el frontend, ajusta `DJANGO_CORS_ALLOWED_ORIGINS` y `DJANGO_CSRF_TRUSTED_ORIGINS`.
+Si el frontend consume backend en desarrollo, revisa:
+- `DJANGO_CORS_ALLOWED_ORIGINS`
+- `DJANGO_CSRF_TRUSTED_ORIGINS`
 
-## Estructura inicial
-- `core`: health-check y configuración base
+## Estructura base backend
+
+- `core`: health-check y configuracion base
 - `library`: modelo `LibraryEntry`
 
-> No hay endpoints API predefinidos (salvo `admin/` y `health/`).
+## Frontend
+
+Codigo frontend:
+- `frontend/` (React + Vite + Docker multistage con Nginx)
+- Usa `POST /api/auth/login/`, `GET /api/users/me/` y `GET/POST/PATCH /api/library/entries/`
+
+Comandos locales frontend (sin Docker):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```

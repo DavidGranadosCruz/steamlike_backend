@@ -1,4 +1,4 @@
-import json
+﻿import json
 
 from django.contrib.auth import get_user_model, authenticate, login, logout, update_session_auth_hash
 
@@ -77,7 +77,7 @@ def error_no_autorizado(message="No autenticado."):
 
 # Ejercicio 3
 def leer_json(request):
-    # Leo el body como JSON de forma simple.
+    # Leo el body como JSON de forma simple
     if not request.body:
         return {}
 
@@ -85,6 +85,8 @@ def leer_json(request):
         return json.loads(request.body)
     except Exception:
         return None
+
+    
 
 
 # Ejercicio 3
@@ -177,7 +179,7 @@ def actualizar_entrada_biblioteca(request, entry_id):
     if not request.user.is_authenticated:
         return error_no_autorizado()
 
-    # Aqui hago el PATCH: solo status y/o hours_played.
+    # Aqui hago el PATCH porque modifico algunos campos
     data = leer_json(request)
     if data is None:
         return error_validacion({"body": "JSON mal formado."})

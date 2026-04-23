@@ -25,11 +25,14 @@ services:
     command: python manage.py runserver 0.0.0.0:8000
 
   frontend:
-    image: javier08877/steamlike:2.0
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
+    restart: unless-stopped
     ports:
       - "3000:80"
-    depends_on:
-      - web
 
 volumes:
   postgres_data:
