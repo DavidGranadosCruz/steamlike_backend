@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import include, path
 
-from library.views import health, registrar_usuario, iniciar_sesion, usuario_actual, cambiar_contraseña, cerrar_sesion
+from library.views import health, registrar_usuario, iniciar_sesion, usuario_actual, cambiar_contraseña, cerrar_sesion, buscar_catalogo
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -12,4 +12,5 @@ urlpatterns = [
     path("api/auth/logout/", cerrar_sesion),
     path("api/users/me/", usuario_actual),
     path("api/users/me/password/", cambiar_contraseña),
+    path("api/catalog/search/", buscar_catalogo),
 ]

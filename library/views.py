@@ -1,4 +1,6 @@
 ﻿import json
+import urllib.request
+import urllib.parse
 
 from django.contrib.auth import get_user_model, authenticate, login, logout, update_session_auth_hash
 
@@ -445,3 +447,33 @@ def cerrar_sesion(request):
     # En ambos casos devolvemos un 204 sin contenido en el body
     logout(request)
     return HttpResponse(status=204)
+
+
+# Ejercicio 2 semana 4
+@require_GET
+def buscar_catalogo(request):
+    q = request.GET.get("q", "").strip()
+    if not q:
+        return JsonResponse(
+            {"error": "validation_error"},
+            status=400,
+        )
+
+    url = f"https://www.cheapshark.com/api/1.0/games?title={urllib.parse.quote(q)}"
+    
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+    except Exception:
+        data = []
+
+    resultados = []
+    for game in data:
+        resultados.append({
+            "external_game_id": game.get("gameID", ""),
+            "title": game.get("external", ""),
+            "thumb": game.get("thumb", "")
+        })
+
+    return JsonResponse(resultados, safe=False, status=200)
