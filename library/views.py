@@ -1,4 +1,4 @@
-﻿import json
+import json
 import urllib.request
 import urllib.parse
 
@@ -477,3 +477,45 @@ def buscar_catalogo(request):
         })
 
     return JsonResponse(resultados, safe=False, status=200)
+
+# Ejercicio 3 semana 4
+@csrf_exempt
+@require_http_methods(["POST"])
+def resolver_catalogo(request):
+    data = leer_json(request)
+    if data is None or not isinstance(data, dict):
+        return JsonResponse({"error": "validation_error"}, status=400)
+    
+    external_game_ids = data.get("external_game_ids")
+    if not isinstance(external_game_ids, list) or len(external_game_ids) == 0:
+        return JsonResponse({"error": "validation_error"}, status=400)
+        
+    # Verificar que todos los items son strings
+    for gid in external_game_ids:
+        if not isinstance(gid, str):
+            return JsonResponse({"error": "validation_error"}, status=400)
+
+    ids_str = ",".join(urllib.parse.quote(gid) for gid in external_game_ids)
+    url = f"https://www.cheapshark.com/api/1.0/games?ids={ids_str}"
+    
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            external_data = json.loads(response.read().decode())
+    except Exception:
+        external_data = {}
+
+    resultados = []
+    # Recorremos los IDs recibidos para mantener un orden predecible
+    # y porque el diccionario de respuesta usa los IDs como claves
+    for gid in external_game_ids:
+        game = external_data.get(gid)
+        if game and isinstance(game, dict) and "info" in game:
+            resultados.append({
+                "external_game_id": gid,
+                "title": game["info"].get("title", ""),
+                "thumb": game["info"].get("thumb", "")
+            })
+
+    return JsonResponse(resultados, safe=False, status=200)
+
