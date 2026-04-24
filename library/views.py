@@ -1,6 +1,7 @@
 import json
 import urllib.request
 import urllib.parse
+import urllib.error
 
 from django.contrib.auth import get_user_model, authenticate, login, logout, update_session_auth_hash
 
@@ -66,7 +67,6 @@ def error_no_encontrado():
     )
 
 
-# Ejercicio 3
 def error_no_autorizado(message="No autenticado."):
     return JsonResponse(
         {
@@ -74,6 +74,33 @@ def error_no_autorizado(message="No autenticado."):
             "message": message,
         },
         status=401,
+    )
+
+
+# Ejercicio 4
+def error_servicio_no_disponible():
+    return JsonResponse(
+        {
+            "error": "external_service_unavailable",
+            "message": "El catálogo externo no está disponible. Inténtalo más tarde."
+        }, status=503
+    )
+
+def error_servicio_externo():
+    return JsonResponse(
+        {
+            "error": "external_service_error",
+            "message": "Error al consultar el catálogo externo."
+        }, status=502
+    )
+
+def error_id_externo_invalido():
+    return JsonResponse(
+        {
+            "error": "invalid_external_game_id",
+            "message": "El juego indicado no existe en el catálogo externo.",
+            "details": { "external_game_id": "not_found" }
+        }, status=400
     )
 
 
@@ -161,6 +188,22 @@ def crear_entrada_biblioteca(request):
 
     if details:
         return error_validacion(details)
+
+    # Ejercicio 4: validacion externa en POST /api/library/entries/
+    url = f"https://www.cheapshark.com/api/1.0/games?ids={urllib.parse.quote(data['external_game_id'])}"
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            external_data = json.loads(response.read().decode())
+    except urllib.error.HTTPError:
+        return error_servicio_externo()
+    except urllib.error.URLError:
+        return error_servicio_no_disponible()
+    except Exception:
+        return error_servicio_externo()
+
+    if not external_data or data["external_game_id"] not in external_data:
+        return error_id_externo_invalido()
 
     try:
         with transaction.atomic():
@@ -463,10 +506,14 @@ def buscar_catalogo(request):
     
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=5) as response:
             data = json.loads(response.read().decode())
+    except urllib.error.HTTPError:
+        return error_servicio_externo()
+    except urllib.error.URLError:
+        return error_servicio_no_disponible()
     except Exception:
-        data = []
+        return error_servicio_externo()
 
     resultados = []
     for game in data:
@@ -500,10 +547,14 @@ def resolver_catalogo(request):
     
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=5) as response:
             external_data = json.loads(response.read().decode())
+    except urllib.error.HTTPError:
+        return error_servicio_externo()
+    except urllib.error.URLError:
+        return error_servicio_no_disponible()
     except Exception:
-        external_data = {}
+        return error_servicio_externo()
 
     resultados = []
     # Recorremos los IDs recibidos para mantener un orden predecible
