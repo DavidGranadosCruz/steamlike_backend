@@ -1,4 +1,8 @@
 .env
+venv/
+staticfiles/
+__pycache__/
+*.pyc
 __MACOSX/._docker-compose.yml
 __MACOSX/._Dockerfile
 __MACOSX/._library

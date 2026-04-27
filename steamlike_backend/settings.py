@@ -17,7 +17,7 @@ def _env_csv(name: str, default_csv: str = "") -> list[str]:
     items = [x.strip() for x in raw.split(",") if x.strip()]
     return items
 
-SECRET_KEY = _env("DJANGO_SECRET_KEY", "change-me")
+SECRET_KEY = _env("SECRET_KEY", _env("DJANGO_SECRET_KEY", "change-me"))
 DEBUG = _env_bool("DJANGO_DEBUG", False)
 
 ALLOWED_HOSTS = _env_csv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
@@ -42,6 +42,7 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
 
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -95,6 +96,8 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- CORS + cookies (SessionAuthentication) ---
