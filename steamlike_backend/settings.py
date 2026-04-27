@@ -71,16 +71,26 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "steamlike_backend.wsgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": _env("POSTGRES_DB", "steamlike"),
-        "USER": _env("POSTGRES_USER", "steamlike"),
-        "PASSWORD": _env("POSTGRES_PASSWORD", "steamlike"),
-        "HOST": _env("POSTGRES_HOST", "db"),
-        "PORT": _env("POSTGRES_PORT", "5432"),
+import sys
+
+if "test" in sys.argv:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": _env("POSTGRES_DB", "steamlike"),
+            "USER": _env("POSTGRES_USER", "steamlike"),
+            "PASSWORD": _env("POSTGRES_PASSWORD", "steamlike"),
+            "HOST": _env("POSTGRES_HOST", "db"),
+            "PORT": _env("POSTGRES_PORT", "5432"),
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

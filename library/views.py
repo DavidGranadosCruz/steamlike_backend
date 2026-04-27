@@ -195,7 +195,9 @@ def crear_entrada_biblioteca(request):
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=5) as response:
             external_data = json.loads(response.read().decode())
-    except urllib.error.HTTPError:
+    except urllib.error.HTTPError as e:
+        if e.code in [400, 404]:
+            return error_id_externo_invalido()
         return error_servicio_externo()
     except urllib.error.URLError:
         return error_servicio_no_disponible()
@@ -497,10 +499,7 @@ def cerrar_sesion(request):
 def buscar_catalogo(request):
     q = request.GET.get("q", "").strip()
     if not q:
-        return JsonResponse(
-            {"error": "validation_error"},
-            status=400,
-        )
+        return error_validacion({"q": "Parámetro obligatorio y no vacío."})
 
     url = f"https://www.cheapshark.com/api/1.0/games?title={urllib.parse.quote(q)}"
     
@@ -531,16 +530,16 @@ def buscar_catalogo(request):
 def resolver_catalogo(request):
     data = leer_json(request)
     if data is None or not isinstance(data, dict):
-        return JsonResponse({"error": "validation_error"}, status=400)
+        return error_validacion({"body": "Se requiere un JSON válido."})
     
     external_game_ids = data.get("external_game_ids")
     if not isinstance(external_game_ids, list) or len(external_game_ids) == 0:
-        return JsonResponse({"error": "validation_error"}, status=400)
+        return error_validacion({"external_game_ids": "Debe ser una lista no vacía."})
         
     # Verificar que todos los items son strings
     for gid in external_game_ids:
         if not isinstance(gid, str):
-            return JsonResponse({"error": "validation_error"}, status=400)
+            return error_validacion({"external_game_ids": "Todos los elementos deben ser strings."})
 
     ids_str = ",".join(urllib.parse.quote(gid) for gid in external_game_ids)
     url = f"https://www.cheapshark.com/api/1.0/games?ids={ids_str}"
