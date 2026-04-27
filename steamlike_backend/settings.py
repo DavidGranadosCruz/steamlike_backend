@@ -20,7 +20,7 @@ def _env_csv(name: str, default_csv: str = "") -> list[str]:
 SECRET_KEY = _env("SECRET_KEY", _env("DJANGO_SECRET_KEY", "change-me"))
 DEBUG = _env_bool("DJANGO_DEBUG", False)
 
-ALLOWED_HOSTS = _env_csv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
+ALLOWED_HOSTS = _env_csv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,steamlike-backend-1.onrender.com")
 
 INSTALLED_APPS = [
     # Django
@@ -57,7 +57,7 @@ ROOT_URLCONF = "steamlike_backend.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -97,14 +97,21 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- CORS + cookies (SessionAuthentication) ---
-CORS_ALLOWED_ORIGINS = _env_csv("DJANGO_CORS_ALLOWED_ORIGINS", "http://frontend:3000,http://localhost:3000")
+CORS_ALLOWED_ORIGINS = _env_csv(
+    "DJANGO_CORS_ALLOWED_ORIGINS",
+    "http://frontend:3000,http://localhost:3000,https://steamlike-backend-1.onrender.com",
+)
 CORS_ALLOW_CREDENTIALS = _env_bool("DJANGO_CORS_ALLOW_CREDENTIALS", True)
 
-CSRF_TRUSTED_ORIGINS = _env_csv("DJANGO_CSRF_TRUSTED_ORIGINS", "http://frontend:3000,http://localhost:3000")
+CSRF_TRUSTED_ORIGINS = _env_csv(
+    "DJANGO_CSRF_TRUSTED_ORIGINS",
+    "http://frontend:3000,http://localhost:3000,https://steamlike-backend-1.onrender.com",
+)
 
 # Dev defaults for cookies (keep simple; hardening can be done later)
 SESSION_COOKIE_SAMESITE = "Lax"

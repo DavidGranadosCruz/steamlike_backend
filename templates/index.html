@@ -1,0 +1,228 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SteamLike — Tu biblioteca personal de videojuegos. Organiza, rastrea y gestiona tu colección de juegos.">
+  <title>SteamLike — Biblioteca de Juegos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+  <!-- ═══════════════════ LOADING SCREEN ═══════════════════ -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loader-content">
+      <div class="loader-logo">
+        <span class="logo-icon">🎮</span>
+        <span class="logo-text">Steam<span class="logo-accent">Like</span></span>
+      </div>
+      <div class="loader-bar"><div class="loader-bar-fill"></div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ AUTH SECTION ═══════════════════ -->
+  <section id="auth-section" class="auth-section hidden">
+    <div class="auth-bg">
+      <div class="auth-particles" id="auth-particles"></div>
+    </div>
+    <div class="auth-card glass">
+      <div class="auth-logo">
+        <span class="logo-icon">🎮</span>
+        <h1>Steam<span class="logo-accent">Like</span></h1>
+        <p class="auth-subtitle">Tu biblioteca personal de videojuegos</p>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" class="auth-form" autocomplete="off">
+        <div class="form-group">
+          <label for="login-username">Usuario</label>
+          <div class="input-wrapper">
+            <span class="input-icon">👤</span>
+            <input type="text" id="login-username" placeholder="Tu nombre de usuario" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="login-password">Contraseña</label>
+          <div class="input-wrapper">
+            <span class="input-icon">🔒</span>
+            <input type="password" id="login-password" placeholder="Tu contraseña" required>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" id="login-btn">
+          <span class="btn-text">Iniciar Sesión</span>
+          <span class="btn-loader hidden"></span>
+        </button>
+        <div id="login-error" class="form-error hidden"></div>
+        <p class="auth-switch">¿No tienes cuenta? <a href="#" id="show-register">Regístrate</a></p>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" class="auth-form hidden" autocomplete="off">
+        <div class="form-group">
+          <label for="reg-username">Usuario</label>
+          <div class="input-wrapper">
+            <span class="input-icon">👤</span>
+            <input type="text" id="reg-username" placeholder="Elige un nombre" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="reg-password">Contraseña</label>
+          <div class="input-wrapper">
+            <span class="input-icon">🔒</span>
+            <input type="password" id="reg-password" placeholder="Mínimo 8 caracteres" required minlength="8">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" id="register-btn">
+          <span class="btn-text">Crear Cuenta</span>
+          <span class="btn-loader hidden"></span>
+        </button>
+        <div id="register-error" class="form-error hidden"></div>
+        <div id="register-success" class="form-success hidden"></div>
+        <p class="auth-switch">¿Ya tienes cuenta? <a href="#" id="show-login">Inicia sesión</a></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ MAIN APP ═══════════════════ -->
+  <section id="app-section" class="app-section hidden">
+    <!-- Top Nav -->
+    <header class="top-bar glass-dark">
+      <div class="top-bar-left">
+        <span class="logo-icon-sm">🎮</span>
+        <span class="brand-text">Steam<span class="logo-accent">Like</span></span>
+      </div>
+      <div class="top-bar-center">
+        <div class="search-box" id="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" placeholder="Buscar en tu biblioteca…">
+        </div>
+      </div>
+      <div class="top-bar-right">
+        <div class="user-badge glass" id="user-badge">
+          <span class="user-avatar">👤</span>
+          <span class="user-name" id="user-name"></span>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="logout-btn" title="Cerrar sesión">⏻</button>
+      </div>
+    </header>
+
+    <!-- Dashboard -->
+    <main class="dashboard">
+      <!-- Stats Row -->
+      <div class="stats-row" id="stats-row">
+        <div class="stat-card glass">
+          <span class="stat-icon">📚</span>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-total">0</span>
+            <span class="stat-label">Total Juegos</span>
+          </div>
+        </div>
+        <div class="stat-card glass">
+          <span class="stat-icon">🕹️</span>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-playing">0</span>
+            <span class="stat-label">Jugando</span>
+          </div>
+        </div>
+        <div class="stat-card glass">
+          <span class="stat-icon">🏆</span>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-completed">0</span>
+            <span class="stat-label">Completados</span>
+          </div>
+        </div>
+        <div class="stat-card glass">
+          <span class="stat-icon">⏱️</span>
+          <div class="stat-info">
+            <span class="stat-value" id="stat-hours">0</span>
+            <span class="stat-label">Horas Totales</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <h2 class="section-title">Mi Biblioteca</h2>
+          <div class="filter-pills" id="filter-pills">
+            <button class="pill active" data-filter="all">Todos</button>
+            <button class="pill" data-filter="wishlist">🎯 Wishlist</button>
+            <button class="pill" data-filter="playing">🕹️ Jugando</button>
+            <button class="pill" data-filter="completed">🏆 Completado</button>
+            <button class="pill" data-filter="dropped">❌ Abandonado</button>
+          </div>
+        </div>
+        <button class="btn btn-accent" id="add-game-btn">
+          <span>＋</span> Añadir Juego
+        </button>
+      </div>
+
+      <!-- Game Grid -->
+      <div class="game-grid" id="game-grid">
+        <!-- Cards injected by JS -->
+      </div>
+
+      <!-- Empty State -->
+      <div class="empty-state hidden" id="empty-state">
+        <span class="empty-icon">🎮</span>
+        <h3>Tu biblioteca está vacía</h3>
+        <p>Añade tu primer juego para empezar a trackear tu colección</p>
+        <button class="btn btn-accent" id="empty-add-btn">＋ Añadir Juego</button>
+      </div>
+    </main>
+  </section>
+
+  <!-- ═══════════════════ ADD / EDIT MODAL ═══════════════════ -->
+  <div class="modal-overlay hidden" id="modal-overlay">
+    <div class="modal glass" id="game-modal">
+      <div class="modal-header">
+        <h3 id="modal-title">Añadir Juego</h3>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <form id="game-form" autocomplete="off">
+        <div class="form-group">
+          <label for="game-id">ID del Juego (externo)</label>
+          <div class="input-wrapper">
+            <span class="input-icon">🎮</span>
+            <input type="text" id="game-id" placeholder="ej. cyberpunk-2077" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="game-status">Estado</label>
+          <div class="select-wrapper">
+            <select id="game-status" required>
+              <option value="wishlist">🎯 Wishlist</option>
+              <option value="playing">🕹️ Jugando</option>
+              <option value="completed">🏆 Completado</option>
+              <option value="dropped">❌ Abandonado</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="game-hours">Horas Jugadas</label>
+          <div class="input-wrapper">
+            <span class="input-icon">⏱️</span>
+            <input type="number" id="game-hours" min="0" value="0" required>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="modal-cancel">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="modal-submit">
+            <span class="btn-text" id="modal-submit-text">Guardar</span>
+            <span class="btn-loader hidden"></span>
+          </button>
+        </div>
+        <div id="modal-error" class="form-error hidden"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ TOAST ═══════════════════ -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="{% static 'js/app.js' %}"></script>
+</body>
+</html>
