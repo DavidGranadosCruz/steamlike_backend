@@ -1,0 +1,9 @@
+.git
+.env
+venv/
+frontend/node_modules/
+node_modules/
+staticfiles/
+__pycache__/
+*.pyc
+*.zip

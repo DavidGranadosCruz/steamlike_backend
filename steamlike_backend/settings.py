@@ -1,6 +1,8 @@
 from pathlib import Path
 import os
 
+import dj_database_url
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 def _env(name: str, default: str | None = None) -> str | None:
@@ -20,7 +22,7 @@ def _env_csv(name: str, default_csv: str = "") -> list[str]:
 SECRET_KEY = _env("SECRET_KEY", _env("DJANGO_SECRET_KEY", "change-me"))
 DEBUG = _env_bool("DJANGO_DEBUG", False)
 
-ALLOWED_HOSTS = _env_csv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,steamlike-backend-1.onrender.com")
+ALLOWED_HOSTS = _env_csv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,.onrender.com")
 
 INSTALLED_APPS = [
     # Django
@@ -72,16 +74,27 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "steamlike_backend.wsgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": _env("POSTGRES_DB", "steamlike"),
-        "USER": _env("POSTGRES_USER", "steamlike"),
-        "PASSWORD": _env("POSTGRES_PASSWORD", "steamlike"),
-        "HOST": _env("POSTGRES_HOST", "db"),
-        "PORT": _env("POSTGRES_PORT", "5432"),
+DATABASE_URL = _env("DATABASE_URL")
+
+if DATABASE_URL:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": _env("POSTGRES_DB", "steamlike"),
+            "USER": _env("POSTGRES_USER", "steamlike"),
+            "PASSWORD": _env("POSTGRES_PASSWORD", "steamlike"),
+            "HOST": _env("POSTGRES_HOST", "db"),
+            "PORT": _env("POSTGRES_PORT", "5432"),
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -115,13 +128,22 @@ CORS_ALLOWED_ORIGINS = _env_csv(
     "DJANGO_CORS_ALLOWED_ORIGINS",
     "http://frontend:3000,http://localhost:3000,https://steamlike-backend-1.onrender.com",
 )
+CORS_ALLOWED_ORIGIN_REGEXES = _env_csv(
+    "DJANGO_CORS_ALLOWED_ORIGIN_REGEXES",
+    r"^https://.*\.onrender\.com$",
+)
 CORS_ALLOW_CREDENTIALS = _env_bool("DJANGO_CORS_ALLOW_CREDENTIALS", True)
 
 CSRF_TRUSTED_ORIGINS = _env_csv(
     "DJANGO_CSRF_TRUSTED_ORIGINS",
-    "http://frontend:3000,http://localhost:3000,https://steamlike-backend-1.onrender.com",
+    "http://frontend:3000,http://localhost:3000,https://*.onrender.com",
 )
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = _env_bool("DJANGO_SECURE_SSL_REDIRECT", False)
 
 # Dev defaults for cookies (keep simple; hardening can be done later)
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SECURE = _env_bool("DJANGO_SESSION_COOKIE_SECURE", False)
+CSRF_COOKIE_SECURE = _env_bool("DJANGO_CSRF_COOKIE_SECURE", False)

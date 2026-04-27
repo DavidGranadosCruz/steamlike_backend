@@ -6,6 +6,7 @@ from library.views import health, registrar_usuario, iniciar_sesion, usuario_act
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("health/", health),
     path("api/health/", health),
     path("api/library/", include("library.urls")),
     path("api/auth/register/", registrar_usuario),
