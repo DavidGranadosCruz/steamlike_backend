@@ -108,16 +108,6 @@ def listar_entradas_biblioteca(request):
     return JsonResponse(data, safe=False, status=200)
 
 
-def detalle_entrada_biblioteca(request, entry_id):
-    if not request.user.is_authenticated:
-        return error_no_autorizado()
-
-    # Devuelvo el detalle de una entrada por id.
-    entrada = buscar_entrada(entry_id)
-    if entrada is None or entrada.user != request.user:
-        return error_no_encontrado()
-
-    return JsonResponse(serializar_entrada(entrada), status=200)
 
 
 @csrf_exempt
@@ -183,7 +173,6 @@ def crear_entrada_biblioteca(request):
                 external_game_id=data["external_game_id"],
                 status=data["status"],
                 hours_played=data["hours_played"],
-                user=request.user,
             )
     except IntegrityError:
         return error_duplicado({"external_game_id": "duplicate"})
