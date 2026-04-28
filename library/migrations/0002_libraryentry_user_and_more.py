@@ -5,6 +5,26 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def add_user_column_if_needed(apps, schema_editor):
+    """Add user_id column only if it doesn't already exist (safe for production)."""
+    connection = schema_editor.connection
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'library_libraryentry' AND column_name = 'user_id'"
+        )
+        if not cursor.fetchone():
+            cursor.execute(
+                'ALTER TABLE "library_libraryentry" '
+                'ADD COLUMN "user_id" integer NULL '
+                'REFERENCES "auth_user" ("id") DEFERRABLE INITIALLY DEFERRED'
+            )
+            cursor.execute(
+                'CREATE INDEX "library_libraryentry_user_id_idx" '
+                'ON "library_libraryentry" ("user_id")'
+            )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -13,10 +33,24 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='libraryentry',
-            name='user',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
+        # Use SeparateDatabaseAndState: Django tracks the field in state,
+        # but the DB operation uses RunPython to safely skip if column exists.
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AddField(
+                    model_name='libraryentry',
+                    name='user',
+                    field=models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+            ],
+            database_operations=[
+                migrations.RunPython(add_user_column_if_needed, migrations.RunPython.noop),
+            ],
         ),
         migrations.AlterField(
             model_name='libraryentry',
