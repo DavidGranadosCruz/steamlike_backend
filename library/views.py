@@ -1,8 +1,6 @@
 import json
 
-from django.contrib.auth import get_user_model, authenticate, login
-
-from django.contrib.auth import authenticate, login as django_login
+from django.contrib.auth import get_user_model, authenticate, login, logout
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
@@ -334,3 +332,10 @@ def usuario_actual(request):
         return JsonResponse({"id": request.user.id, "username": request.user.username}, status=200)
     else:
         return error_no_autorizado(message="No autenticado")
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def cerrar_sesion(request):
+    logout(request)
+    return JsonResponse({"message": "Sesión cerrada"}, status=200)

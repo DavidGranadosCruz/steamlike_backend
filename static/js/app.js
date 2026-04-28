@@ -221,9 +221,8 @@
   });
 
   // Logout
-  $("#logout-btn").addEventListener("click", () => {
-    // Simple client-side logout: clear session cookie and reload
-    document.cookie = "sessionid=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;";
+  $("#logout-btn").addEventListener("click", async () => {
+    await api("/api/auth/logout/", { method: "POST" });
     toast("Sesión cerrada", "info");
     setTimeout(() => location.reload(), 600);
   });
