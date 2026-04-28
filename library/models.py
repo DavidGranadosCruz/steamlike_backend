@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.contrib.auth.models import User
 
 class LibraryEntry(models.Model):
     STATUS_WISHLIST = "wishlist"
@@ -14,7 +15,11 @@ class LibraryEntry(models.Model):
         STATUS_DROPPED,
     )
 
-    external_game_id = models.CharField(max_length=100, unique=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    external_game_id = models.CharField(max_length=100)
+
+    class Meta:
+        unique_together = ("user", "external_game_id")
     status = models.CharField(max_length=20, default=STATUS_WISHLIST)
     hours_played = models.IntegerField(default=0)
 

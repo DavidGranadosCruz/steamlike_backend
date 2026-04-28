@@ -96,6 +96,14 @@ else:
         }
     }
 
+# Si estamos ejecutando tests fuera de Docker, usar SQLite en memoria
+import sys
+if "test" in sys.argv and _env("POSTGRES_HOST") is None:
+    DATABASES["default"] = {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": ":memory:",
+    }
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

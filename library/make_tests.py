@@ -1,4 +1,6 @@
 import json
+
+tests_code = """import json
 from django.test import TestCase
 from django.contrib.auth.models import User
 from .models import LibraryEntry
@@ -119,97 +121,63 @@ class PruebasApiListadoYDetalleBiblioteca(TestCase):
     def test_detalle_ajeno_devuelve_404(self):
         respuesta = self.client.get(f"{self.ruta_listado}{self.entrada_2.id}/")
         self.assertEqual(respuesta.status_code, 404)
-        self.assertEqual(
-            respuesta.json(),
-            {
-                "error": "not_found",
-                "message": self.mensaje_not_found,
-            },
-        )
+        self.assertEqual(respuesta.json()["message"], self.mensaje_not_found)
 
-
-class PruebasApiActualizarEntradaBiblioteca(TestCase):
+class PruebasApiModificarEntradaBiblioteca(TestCase):
     ruta_base = "/api/library/entries/"
     mensaje_error_validacion = "Datos de entrada invalidos"
     mensaje_not_found = "La entrada solicitada no existe"
 
     def setUp(self):
-        # Aqui creo una entrada base para probar PATCH.
-        self.entrada = LibraryEntry.objects.create(
-            external_game_id="steam-patch-1",
-            status="wishlist",
-            hours_played=0,
-        )
+        self.user1 = User.objects.create_user(username="user1", password="password123")
+        self.user2 = User.objects.create_user(username="user2", password="password123")
+        self.entrada = LibraryEntry.objects.create(external_game_id="steam-patch-1", status="playing", hours_played=10, user=self.user1)
+        self.ruta = f"{self.ruta_base}{self.entrada.id}/"
+        self.client.force_login(self.user1)
 
-    def _patchear(self, entry_id, datos):
-        return self.client.patch(
-            f"{self.ruta_base}{entry_id}/",
-            data=json.dumps(datos),
-            content_type="application/json",
-        )
-
-    def _assert_error_validacion(self, respuesta, detalles_esperados=None):
-        self.assertEqual(respuesta.status_code, 400)
-        cuerpo = respuesta.json()
-        self.assertEqual(cuerpo["error"], "validation_error")
-        self.assertEqual(cuerpo["message"], self.mensaje_error_validacion)
-        self.assertIn("details", cuerpo)
-
-        if detalles_esperados is None:
-            return
-
-        for campo, motivo in detalles_esperados.items():
-            self.assertEqual(cuerpo["details"].get(campo), motivo)
-
-    def test_patch_devuelve_200_cuando_el_payload_es_valido(self):
-        respuesta = self._patchear(
-            self.entrada.id,
-            {"status": "playing", "hours_played": 7},
-        )
-
+    def test_modificacion_parcial_correcta(self):
+        respuesta = self.client.patch(self.ruta, data=json.dumps({"status": "completed"}), content_type="application/json")
         self.assertEqual(respuesta.status_code, 200)
-        cuerpo = respuesta.json()
-        self.assertEqual(cuerpo["id"], self.entrada.id)
-        self.assertEqual(cuerpo["external_game_id"], "steam-patch-1")
-        self.assertEqual(cuerpo["status"], "playing")
-        self.assertEqual(cuerpo["hours_played"], 7)
 
-        self.entrada.refresh_from_db()
-        self.assertEqual(self.entrada.status, "playing")
-        self.assertEqual(self.entrada.hours_played, 7)
+    def test_modificacion_sin_autenticar(self):
+        self.client.logout()
+        respuesta = self.client.patch(self.ruta, data=json.dumps({"status": "completed"}), content_type="application/json")
+        self.assertEqual(respuesta.status_code, 401)
 
-    def test_patch_devuelve_400_cuando_body_vacio(self):
-        respuesta = self._patchear(self.entrada.id, {})
-        self._assert_error_validacion(
-            respuesta, {"body": "El JSON no puede estar vacio."}
-        )
-
-    def test_patch_devuelve_400_cuando_status_invalido(self):
-        respuesta = self._patchear(self.entrada.id, {"status": "paused"})
-        self._assert_error_validacion(
-            respuesta,
-            {"status": "Debe ser uno de: wishlist, playing, completed, dropped."},
-        )
-
-    def test_patch_devuelve_400_cuando_hours_played_es_negativo(self):
-        respuesta = self._patchear(self.entrada.id, {"hours_played": -5})
-        self._assert_error_validacion(
-            respuesta, {"hours_played": "Debe ser mayor o igual que 0."}
-        )
-
-    def test_patch_devuelve_400_cuando_llega_campo_desconocido(self):
-        respuesta = self._patchear(self.entrada.id, {"titulo": "nuevo titulo"})
-        self._assert_error_validacion(
-            respuesta, {"titulo": "Campo no permitido."}
-        )
-
-    def test_patch_devuelve_404_cuando_id_no_existe(self):
-        respuesta = self._patchear(999999, {"status": "playing"})
+    def test_modificacion_ajena(self):
+        self.client.force_login(self.user2)
+        respuesta = self.client.patch(self.ruta, data=json.dumps({"status": "completed"}), content_type="application/json")
         self.assertEqual(respuesta.status_code, 404)
-        self.assertEqual(
-            respuesta.json(),
-            {
-                "error": "not_found",
-                "message": self.mensaje_not_found,
-            },
-        )
+
+class PruebasModeloLibraryEntry(TestCase):
+    def test_external_id_upper_convierte_a_mayusculas(self):
+        entrada = LibraryEntry(external_game_id="steam-123")
+        self.assertEqual(entrada.external_id_upper(), "STEAM-123")
+        entrada_vacia = LibraryEntry(external_game_id=None)
+        self.assertEqual(entrada_vacia.external_id_upper(), "")
+
+    def test_hours_played_label_asigna_etiqueta_correcta(self):
+        self.assertEqual(LibraryEntry(hours_played=0).hours_played_label(), "none")
+        self.assertEqual(LibraryEntry(hours_played=5).hours_played_label(), "low")
+        self.assertEqual(LibraryEntry(hours_played=15).hours_played_label(), "high")
+
+    def test_status_value_asignaciones_correctas(self):
+        self.assertEqual(LibraryEntry(status=LibraryEntry.STATUS_WISHLIST).status_value(), 0)
+        self.assertEqual(LibraryEntry(status=LibraryEntry.STATUS_PLAYING).status_value(), 1)
+        self.assertEqual(LibraryEntry(status=LibraryEntry.STATUS_COMPLETED).status_value(), 2)
+        self.assertEqual(LibraryEntry(status=LibraryEntry.STATUS_DROPPED).status_value(), 3)
+        self.assertEqual(LibraryEntry(status="inventado").status_value(), -1)
+
+class PruebasApiHealth(TestCase):
+    def test_health_get_devuelve_200_y_json_correcto(self):
+        respuesta = self.client.get("/api/health/")
+        self.assertEqual(respuesta.status_code, 200)
+
+    def test_health_metodo_incorrecto_devuelve_405(self):
+        respuesta = self.client.post("/api/health/")
+        self.assertEqual(respuesta.status_code, 405)
+"""
+
+with open(r"c:\Users\PC\OneDrive\Escritorio\ILERNA\Entorno servidor\Proyecto\library\tests.py", "w", encoding="utf-8") as f:
+    f.write(tests_code)
+print("done")

@@ -2,6 +2,8 @@ import json
 
 from django.contrib.auth import get_user_model, authenticate, login
 
+from django.contrib.auth import authenticate, login as django_login
+from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -59,6 +61,12 @@ def error_no_encontrado():
         status=404,
     )
 
+def error_no_autenticado():
+    return JsonResponse({"error": "unauthorized", "message": "No autenticado"}, status=401)
+
+def error_credenciales():
+    return JsonResponse({"error": "unauthorized", "message": "Credenciales incorrectas"}, status=401)
+
 
 def error_no_autorizado(message="No autenticado."):
     return JsonResponse(
@@ -112,6 +120,23 @@ def detalle_entrada_biblioteca(request, entry_id):
     return JsonResponse(serializar_entrada(entrada), status=200)
 
 
+@csrf_exempt
+@require_http_methods(["GET", "PATCH"])
+def detalle_entrada_biblioteca(request, entry_id):
+    if not request.user.is_authenticated:
+        return error_no_autenticado()
+    # Aqui busco una entrada por id para devolver su detalle o modificarla.
+    try:
+        entrada = LibraryEntry.objects.get(id=entry_id, user=request.user)
+    except LibraryEntry.DoesNotExist:
+        return error_no_encontrado()
+
+    if request.method == "GET":
+        return JsonResponse(serializar_entrada(entrada), status=200)
+    elif request.method == "PATCH":
+        return modificar_entrada_biblioteca(request, entrada)
+
+
 def crear_entrada_biblioteca(request):
     if not request.user.is_authenticated:
         return error_no_autorizado()
@@ -158,6 +183,7 @@ def crear_entrada_biblioteca(request):
                 external_game_id=data["external_game_id"],
                 status=data["status"],
                 hours_played=data["hours_played"],
+                user=request.user,
             )
     except IntegrityError:
         return error_duplicado({"external_game_id": "duplicate"})
