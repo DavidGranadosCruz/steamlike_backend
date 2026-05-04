@@ -28,9 +28,13 @@ jobs:
       run: |
         coverage run manage.py test
         coverage report
-        
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
     - name: Deploy to Render
-      if: github.ref == 'refs/heads/main' && success()
       run: |
         if [ -z "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
           echo "No deploy hook found, skipping..."
