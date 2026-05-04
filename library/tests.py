@@ -8,7 +8,7 @@ class PruebasApiAuth(TestCase):
         respuesta = self.client.post("/api/auth/register/", data=json.dumps({"username": "testuser", "password": "password123"}), content_type="application/json")
         self.assertEqual(respuesta.status_code, 201)
         self.assertIn("id", respuesta.json())
-        self.assertEqual(respuesta.json()["username"], "usuario_FALLO")
+        self.assertEqual(respuesta.json()["username"], "testuser")
 
     def test_registro_invalido(self):
         # Vacio
