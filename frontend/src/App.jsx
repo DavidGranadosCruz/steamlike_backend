@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { apiBaseUrl, apiRequest } from './api'
 
@@ -13,7 +13,7 @@ const STATUS_LABELS = Object.fromEntries(
   STATUS_OPTIONS.map((option) => [option.value, option.label]),
 )
 
-const initialAuthForm = { username: '', password: '' }
+const initialAuthForm = { username: '', password: '', email: '' }
 
 function buildEditDrafts(entries) {
   const next = {}
@@ -125,30 +125,34 @@ function App() {
   }, [selectedEntryId])
 
   // --- Resolve: enriquecer biblioteca con título y thumb ---
-  const resolveLibraryGames = useCallback(async (libraryEntries) => {
-    const ids = libraryEntries.map((e) => e.external_game_id).filter(Boolean)
-    if (ids.length === 0) return
-    try {
-      const resolved = await apiRequest('/api/catalog/resolve/', {
-        method: 'POST',
-        body: { external_game_ids: ids },
-      })
-      const map = {}
-      for (const game of resolved) {
-        map[game.external_game_id] = game
-      }
-      setResolvedGames(map)
-    } catch {
-      // No bloquear si falla resolve
-    }
-  }, [])
-
   // Resolver cuando cambian las entries
   useEffect(() => {
-    if (entries.length > 0) {
-      resolveLibraryGames(entries)
+    const ids = entries.map((e) => e.external_game_id).filter(Boolean)
+    if (ids.length === 0) {
+      return undefined
     }
-  }, [entries, resolveLibraryGames])
+
+    let cancelled = false
+    async function runResolveLibraryGames() {
+      try {
+        const resolved = await apiRequest('/api/catalog/resolve/', {
+          method: 'POST',
+          body: { external_game_ids: ids },
+        })
+        if (cancelled) return
+        const map = {}
+        for (const game of resolved) {
+          map[game.external_game_id] = game
+        }
+        setResolvedGames(map)
+      } catch {
+        // No bloquear si falla resolve.
+      }
+    }
+
+    runResolveLibraryGames()
+    return () => { cancelled = true }
+  }, [entries])
 
   const filteredEntries = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -199,10 +203,14 @@ function App() {
     setAuthLoading(true)
     setAuthError('')
     try {
+      const credentials = { username: authForm.username, password: authForm.password }
       if (authMode === 'register') {
-        await apiRequest('/api/auth/register/', { method: 'POST', body: authForm })
+        await apiRequest('/api/auth/register/', {
+          method: 'POST',
+          body: { ...credentials, email: authForm.email },
+        })
       }
-      const loginResponse = await apiRequest('/api/auth/login/', { method: 'POST', body: authForm })
+      const loginResponse = await apiRequest('/api/auth/login/', { method: 'POST', body: credentials })
       setUser(loginResponse)
       setAuthForm(initialAuthForm)
       setSessionState('authenticated')
@@ -215,7 +223,9 @@ function App() {
   }
 
   async function handleLogout() {
-    try { await apiRequest('/api/auth/logout/', { method: 'POST' }) } catch { }
+    try { await apiRequest('/api/auth/logout/', { method: 'POST' }) } catch {
+      // La sesion puede estar expirada igualmente.
+    }
     setUser(null); setEntries([]); setSelectedEntry(null); setSelectedEntryId(null)
     setSessionState('anonymous'); setAuthMode('login'); setResolvedGames({})
   }
@@ -363,6 +373,11 @@ function App() {
             <label htmlFor="password">Password
               <input id="password" name="password" type="password" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} value={authForm.password} onChange={(e) => setAuthForm((c) => ({ ...c, password: e.target.value }))} required />
             </label>
+            {authMode === 'register' && (
+              <label htmlFor="email">Email
+                <input id="email" name="email" type="email" autoComplete="email" value={authForm.email} onChange={(e) => setAuthForm((c) => ({ ...c, email: e.target.value }))} required />
+              </label>
+            )}
             <button type="submit" disabled={authLoading}>{authLoading ? 'Procesando...' : authMode === 'login' ? 'Iniciar sesion' : 'Crear cuenta y entrar'}</button>
           </form>
           {authError && <p className="message message--error">{authError}</p>}

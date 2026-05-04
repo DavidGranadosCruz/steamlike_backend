@@ -68,6 +68,13 @@ Si el frontend consume backend en desarrollo, revisa:
 - `DJANGO_CORS_ALLOWED_ORIGINS`
 - `DJANGO_CSRF_TRUSTED_ORIGINS`
 
+Variables para envio de email con Maileroo:
+- `MAILEROO_API_KEY`: Sending Key de Maileroo.
+- `MAILEROO_FROM_ADDRESS`: remitente verificado en Maileroo.
+- `MAILEROO_FROM_NAME`: nombre visible del remitente, por defecto `Nexus Play`.
+- `MAILEROO_API_URL`: endpoint de envio, por defecto `https://smtp.maileroo.com/api/v2/emails`.
+- `MAILEROO_TIMEOUT`: timeout en segundos, por defecto `5`.
+
 ## Estructura base backend
 
 - `core`: health-check y configuracion base

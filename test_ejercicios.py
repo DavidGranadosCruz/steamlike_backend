@@ -3,6 +3,7 @@ import sys
 sys.argv.append("test")
 import django
 import json
+import uuid
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "steamlike_backend.settings")
 django.setup()
@@ -17,11 +18,8 @@ def run_tests():
     client = Client(SERVER_NAME='localhost')
     User = get_user_model()
     
-    # Crear un usuario de prueba si no existe
-    user, created = User.objects.get_or_create(username='testuser_ejercicios')
-    if created:
-        user.set_password('password123')
-        user.save()
+    username = f"testuser_ejercicios_{uuid.uuid4().hex[:8]}"
+    user = User.objects.create_user(username=username, password='password123')
 
     print("--- Ejercicio 2 ---")
     # 1. GET /api/catalog/search/?q=mario
@@ -71,14 +69,35 @@ def run_tests():
 
     print("\n--- Ejercicio 5 ---")
     print("Flujo completo (search, create, list, resolve):")
-    # search ya lo hicimos y sabemos que funciona
-    game_id_to_add = "128" # Mario o algo existente, 128 es Batman en cheapshark
-    resp_add = client.post('/api/library/entries/', json.dumps({
-        "external_game_id": game_id_to_add, 
-        "status": "playing", 
-        "hours_played": 10
-    }), content_type="application/json")
-    print(f"create status: {resp_add.status_code}")
+    search_data = resp1.json() if resp1.status_code == 200 else []
+    game_id_to_add = None
+    for game in search_data:
+        candidate = game.get("external_game_id")
+        if candidate and not LibraryEntry.objects.filter(external_game_id=candidate).exists():
+            game_id_to_add = candidate
+            break
+
+    if game_id_to_add is None:
+        resp_zelda = client.get('/api/catalog/search/?q=zelda')
+        if resp_zelda.status_code == 200:
+            for game in resp_zelda.json():
+                candidate = game.get("external_game_id")
+                if candidate and not LibraryEntry.objects.filter(external_game_id=candidate).exists():
+                    game_id_to_add = candidate
+                    break
+
+    if game_id_to_add is None:
+        print("create status: SKIP (no hay gameID libre para la prueba en la BD local)")
+        resp_add = None
+    else:
+        resp_add = client.post('/api/library/entries/', json.dumps({
+            "external_game_id": game_id_to_add,
+            "status": "playing",
+            "hours_played": 10
+        }), content_type="application/json")
+        print(f"create status: {resp_add.status_code}")
+        if resp_add.status_code != 201:
+            print(f"create body: {resp_add.json()}")
     
     resp_list = client.get('/api/library/entries/')
     print(f"list status: {resp_list.status_code}")
@@ -86,19 +105,24 @@ def run_tests():
     print(f"list size: {len(data)}")
     
     ids_to_resolve = [entry["external_game_id"] for entry in data]
-    resp_res = client.post('/api/catalog/resolve/', json.dumps({"external_game_ids": ids_to_resolve}), content_type="application/json")
-    print(f"resolve status: {resp_res.status_code}")
-    print(f"resolve body: {resp_res.json()[:1]}")
+    if ids_to_resolve:
+        resp_res = client.post('/api/catalog/resolve/', json.dumps({"external_game_ids": ids_to_resolve}), content_type="application/json")
+        print(f"resolve status: {resp_res.status_code}")
+        print(f"resolve body: {resp_res.json()[:1]}")
+    else:
+        print("resolve status: SKIP (sin entradas creadas)")
 
     print("\nIntentos fallidos de Ejercicio 5:")
     client.logout()
     resp_unauth = client.post('/api/library/entries/', json.dumps({
-        "external_game_id": "128", 
-        "status": "playing", 
+        "external_game_id": game_id_to_add or "1",
+        "status": "playing",
         "hours_played": 10
     }), content_type="application/json")
     print(f"unauth status: {resp_unauth.status_code}")
     print(f"unauth body: {resp_unauth.json()}")
+
+    user.delete()
 
 if __name__ == '__main__':
     run_tests()

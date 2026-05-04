@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import include, path
 
-from library.views import health, registrar_usuario, iniciar_sesion, usuario_actual, cambiar_contraseña, cerrar_sesion, buscar_catalogo, resolver_catalogo
+from library.views import health, registrar_usuario, iniciar_sesion, usuario_actual, cambiar_contraseña, cerrar_sesion, buscar_catalogo, resolver_catalogo, debug_email_test
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -14,4 +14,5 @@ urlpatterns = [
     path("api/users/me/password/", cambiar_contraseña),
     path("api/catalog/search/", buscar_catalogo),
     path("api/catalog/resolve/", resolver_catalogo),
+    path("api/debug/email/test/", debug_email_test),
 ]

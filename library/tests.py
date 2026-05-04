@@ -1,14 +1,33 @@
 import json
+import urllib.error
+from unittest.mock import patch
 
-from django.test import TestCase
+from django.contrib.auth import get_user_model
+from django.test import TestCase, override_settings
 
+from .email_service import EmailService, EmailServiceError, EmailServiceUnavailable
 from .models import LibraryEntry
+from .views import CatalogServiceError, CatalogServiceUnavailable
 
 
 class PruebasApiCrearEntradaBiblioteca(TestCase):
     ruta = "/api/library/entries/"
     mensaje_error_validacion = "Datos de entrada invalidos"
     mensaje_error_duplicado = "El juego ya existe en la biblioteca"
+
+    def setUp(self):
+        User = get_user_model()
+        self.usuario = User.objects.create_user(
+            username="createuser",
+            password="testpassword123",
+        )
+        self.client.force_login(self.usuario)
+        self.catalog_patch = patch(
+            "library.views.external_game_id_existe",
+            return_value=True,
+        )
+        self.catalog_patch.start()
+        self.addCleanup(self.catalog_patch.stop)
 
     def _postear(self, datos):
         return self.client.post(
@@ -161,13 +180,20 @@ class PruebasApiListadoYDetalleBiblioteca(TestCase):
     mensaje_not_found = "La entrada solicitada no existe"
 
     def setUp(self):
-        # Aqui preparo 2 entradas para probar listado y detalle.
+        User = get_user_model()
+        self.usuario = User.objects.create_user(
+            username="listuser",
+            password="testpassword123",
+        )
+        self.client.force_login(self.usuario)
         self.entrada_1 = LibraryEntry.objects.create(
+            user=self.usuario,
             external_game_id="steam-list-1",
             status="playing",
             hours_played=5,
         )
         self.entrada_2 = LibraryEntry.objects.create(
+            user=self.usuario,
             external_game_id="steam-list-2",
             status="wishlist",
             hours_played=0,
@@ -240,8 +266,14 @@ class PruebasApiActualizarEntradaBiblioteca(TestCase):
     mensaje_not_found = "La entrada solicitada no existe"
 
     def setUp(self):
-        # Aqui creo una entrada base para probar PATCH.
+        User = get_user_model()
+        self.usuario = User.objects.create_user(
+            username="patchuser",
+            password="testpassword123",
+        )
+        self.client.force_login(self.usuario)
         self.entrada = LibraryEntry.objects.create(
+            user=self.usuario,
             external_game_id="steam-patch-1",
             status="wishlist",
             hours_played=0,
@@ -310,6 +342,7 @@ class PruebasApiActualizarEntradaBiblioteca(TestCase):
         )
 
     def test_patch_devuelve_404_cuando_id_no_existe(self):
+        respuesta = self._patchear(999999, {"status": "playing"})
         self.assertEqual(respuesta.status_code, 404)
         self.assertEqual(
             respuesta.json(),
@@ -318,8 +351,6 @@ class PruebasApiActualizarEntradaBiblioteca(TestCase):
                 "message": self.mensaje_not_found,
             },
         )
-
-from django.contrib.auth import get_user_model
 
 # Ejercicio 4
 class PruebasApiSustituirEntradaBiblioteca(TestCase):
@@ -488,3 +519,431 @@ class PruebasApiCambiarContrasena(TestCase):
         }
         respuesta = self._postear(datos)
         self.assertEqual(respuesta.status_code, 401)
+
+
+class PruebasCatalogoSemana4(TestCase):
+    ruta_search = "/api/catalog/search/"
+    ruta_resolve = "/api/catalog/resolve/"
+    ruta_library = "/api/library/entries/"
+
+    def setUp(self):
+        User = get_user_model()
+        self.usuario = User.objects.create_user(
+            username="cataloguser",
+            password="testpassword123",
+        )
+
+    def _post_json(self, ruta, datos):
+        return self.client.post(
+            ruta,
+            data=json.dumps(datos),
+            content_type="application/json",
+        )
+
+    def test_search_devuelve_formato_estable(self):
+        catalog_response = [
+            {"gameID": "1", "external": "Mario Test", "thumb": "https://img.test/1.jpg"}
+        ]
+
+        with patch("library.views.consultar_cheapshark", return_value=catalog_response):
+            respuesta = self.client.get(f"{self.ruta_search}?q=mario")
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(
+            respuesta.json(),
+            [
+                {
+                    "external_game_id": "1",
+                    "title": "Mario Test",
+                    "thumb": "https://img.test/1.jpg",
+                }
+            ],
+        )
+
+    def test_search_sin_q_devuelve_validation_error(self):
+        respuesta = self.client.get(self.ruta_search)
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["error"], "validation_error")
+
+    def test_search_con_q_vacio_devuelve_validation_error(self):
+        respuesta = self.client.get(f"{self.ruta_search}?q=")
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["error"], "validation_error")
+
+    def test_resolve_devuelve_formato_estable(self):
+        catalog_response = {
+            "1": {"info": {"title": "Game One", "thumb": "https://img.test/1.jpg"}},
+            "2": {"info": {"title": "Game Two", "thumb": "https://img.test/2.jpg"}},
+        }
+
+        with patch("library.views.consultar_cheapshark_por_ids", return_value=catalog_response):
+            respuesta = self._post_json(
+                self.ruta_resolve,
+                {"external_game_ids": ["1", "2"]},
+            )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(
+            respuesta.json(),
+            [
+                {
+                    "external_game_id": "1",
+                    "title": "Game One",
+                    "thumb": "https://img.test/1.jpg",
+                },
+                {
+                    "external_game_id": "2",
+                    "title": "Game Two",
+                    "thumb": "https://img.test/2.jpg",
+                },
+            ],
+        )
+
+    def test_resolve_con_lista_vacia_devuelve_validation_error(self):
+        respuesta = self._post_json(self.ruta_resolve, {"external_game_ids": []})
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["error"], "validation_error")
+
+    def test_resolve_sin_external_game_ids_devuelve_validation_error(self):
+        respuesta = self._post_json(self.ruta_resolve, {})
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["error"], "validation_error")
+
+    def test_503_si_no_hay_respuesta_del_catalogo(self):
+        with patch(
+            "library.views.consultar_cheapshark",
+            side_effect=CatalogServiceUnavailable,
+        ):
+            respuesta = self.client.get(f"{self.ruta_search}?q=mario")
+
+        self.assertEqual(respuesta.status_code, 503)
+        self.assertEqual(
+            respuesta.json(),
+            {
+                "error": "external_service_unavailable",
+                "message": "El catálogo externo no está disponible. Inténtalo más tarde.",
+            },
+        )
+
+    def test_502_si_el_catalogo_responde_datos_invalidos(self):
+        with patch(
+            "library.views.consultar_cheapshark_por_ids",
+            side_effect=CatalogServiceError,
+        ):
+            respuesta = self._post_json(
+                self.ruta_resolve,
+                {"external_game_ids": ["1"]},
+            )
+
+        self.assertEqual(respuesta.status_code, 502)
+        self.assertEqual(
+            respuesta.json(),
+            {
+                "error": "external_service_error",
+                "message": "Error al consultar el catálogo externo.",
+            },
+        )
+
+    def test_post_library_sin_autenticar_devuelve_401(self):
+        respuesta = self._post_json(
+            self.ruta_library,
+            {"external_game_id": "1", "status": "wishlist", "hours_played": 0},
+        )
+
+        self.assertEqual(respuesta.status_code, 401)
+        self.assertEqual(respuesta.json()["error"], "unauthorized")
+
+    def test_post_library_con_id_inexistente_devuelve_invalid_external_game_id(self):
+        self.client.force_login(self.usuario)
+
+        with patch("library.views.external_game_id_existe", return_value=False):
+            respuesta = self._post_json(
+                self.ruta_library,
+                {"external_game_id": "not_found", "status": "wishlist", "hours_played": 0},
+            )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(
+            respuesta.json(),
+            {
+                "error": "invalid_external_game_id",
+                "message": "El juego indicado no existe en el catálogo externo.",
+                "details": {"external_game_id": "not_found"},
+            },
+        )
+
+    def test_flujo_completo_search_create_list_resolve(self):
+        self.client.force_login(self.usuario)
+        search_response = [
+            {"gameID": "flow-1", "external": "Flow Game", "thumb": "https://img.test/flow.jpg"}
+        ]
+        resolve_response = {
+            "flow-1": {
+                "info": {
+                    "title": "Flow Game",
+                    "thumb": "https://img.test/flow.jpg",
+                }
+            }
+        }
+
+        with patch("library.views.consultar_cheapshark", return_value=search_response):
+            search = self.client.get(f"{self.ruta_search}?q=mario")
+
+        with patch("library.views.external_game_id_existe", return_value=True):
+            create = self._post_json(
+                self.ruta_library,
+                {"external_game_id": "flow-1", "status": "wishlist", "hours_played": 0},
+            )
+
+        listado = self.client.get(self.ruta_library)
+
+        with patch("library.views.consultar_cheapshark_por_ids", return_value=resolve_response):
+            resolve = self._post_json(
+                self.ruta_resolve,
+                {"external_game_ids": ["flow-1"]},
+            )
+
+        self.assertEqual(search.status_code, 200)
+        self.assertEqual(create.status_code, 201)
+        self.assertEqual(listado.status_code, 200)
+        self.assertEqual(resolve.status_code, 200)
+        self.assertNotIn("title", listado.json()[0])
+        self.assertEqual(resolve.json()[0]["title"], "Flow Game")
+
+
+class FakeEmailResponse:
+    def __init__(self, body, status=200):
+        self.body = body
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def read(self):
+        return self.body.encode("utf-8")
+
+
+@override_settings(
+    MAILEROO_API_KEY="test-key",
+    MAILEROO_FROM_ADDRESS="sender@example.com",
+    MAILEROO_FROM_NAME="Nexus Play",
+    MAILEROO_API_URL="https://smtp.maileroo.com/api/v2/emails",
+    MAILEROO_TIMEOUT=1,
+)
+class PruebasEmailService(TestCase):
+    def test_envio_correcto_registra_logs_y_payload(self):
+        fake_response = FakeEmailResponse(
+            '{"success": true, "data": {"reference_id": "ref-123"}}'
+        )
+
+        with patch("library.email_service.urllib.request.urlopen", return_value=fake_response) as mocked_urlopen:
+            with self.assertLogs("library.email_service", level="INFO") as logs:
+                result = EmailService().send_email(
+                    "destino@example.com",
+                    "Asunto",
+                    "Texto",
+                    action="send_email",
+                )
+
+        self.assertTrue(result["success"])
+        request = mocked_urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(payload["from"]["address"], "sender@example.com")
+        self.assertEqual(payload["to"], [{"address": "destino@example.com"}])
+        self.assertIn("email intento de envio", "\n".join(logs.output))
+        self.assertIn("email envio OK", "\n".join(logs.output))
+        self.assertNotIn("test-key", "\n".join(logs.output))
+
+    def test_timeout_o_red_lanza_error_controlado_503(self):
+        with patch(
+            "library.email_service.urllib.request.urlopen",
+            side_effect=urllib.error.URLError("network down"),
+        ):
+            with self.assertLogs("library.email_service", level="ERROR") as logs:
+                with self.assertRaises(EmailServiceUnavailable):
+                    EmailService().send_email(
+                        "destino@example.com",
+                        "Asunto",
+                        "Texto",
+                        action="send_email",
+                    )
+
+        self.assertIn("fallo por timeout/red", "\n".join(logs.output))
+
+    def test_respuesta_invalida_lanza_error_controlado_502(self):
+        fake_response = FakeEmailResponse('{"success": false}', status=200)
+
+        with patch("library.email_service.urllib.request.urlopen", return_value=fake_response):
+            with self.assertLogs("library.email_service", level="ERROR") as logs:
+                with self.assertRaises(EmailServiceError):
+                    EmailService().send_email(
+                        "destino@example.com",
+                        "Asunto",
+                        "Texto",
+                        action="send_email",
+                    )
+
+        self.assertIn("fallo por respuesta del proveedor", "\n".join(logs.output))
+
+
+class PruebasDebugEmail(TestCase):
+    ruta = "/api/debug/email/test/"
+
+    def _post_json(self, datos):
+        return self.client.post(
+            self.ruta,
+            data=json.dumps(datos),
+            content_type="application/json",
+        )
+
+    @override_settings(DEBUG=True)
+    def test_envio_correcto_devuelve_ok(self):
+        with patch("library.views.EmailService") as service_class:
+            respuesta = self._post_json(
+                {"to": "destino@example.com", "subject": "Asunto", "text": "Texto"}
+            )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json(), {"ok": True})
+        service_class.return_value.send_email.assert_called_once_with(
+            to="destino@example.com",
+            subject="Asunto",
+            text="Texto",
+            action="send_email",
+        )
+
+    @override_settings(DEBUG=True)
+    def test_json_vacio_devuelve_validation_error(self):
+        respuesta = self._post_json({})
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["error"], "validation_error")
+
+    @override_settings(DEBUG=True)
+    def test_falta_to_devuelve_validation_error(self):
+        respuesta = self._post_json({"subject": "Asunto", "text": "Texto"})
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["error"], "validation_error")
+        self.assertEqual(respuesta.json()["details"]["to"], "Campo obligatorio.")
+
+    @override_settings(DEBUG=True)
+    def test_to_no_string_devuelve_validation_error(self):
+        respuesta = self._post_json({"to": 123, "subject": "Asunto", "text": "Texto"})
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["error"], "validation_error")
+        self.assertEqual(respuesta.json()["details"]["to"], "Debe ser string.")
+
+    @override_settings(DEBUG=True)
+    def test_fallo_red_devuelve_503(self):
+        with patch("library.views.EmailService") as service_class:
+            service_class.return_value.send_email.side_effect = EmailServiceUnavailable
+            respuesta = self._post_json(
+                {"to": "destino@example.com", "subject": "Asunto", "text": "Texto"}
+            )
+
+        self.assertEqual(respuesta.status_code, 503)
+        self.assertEqual(respuesta.json()["error"], "external_service_unavailable")
+
+    @override_settings(DEBUG=True)
+    def test_fallo_proveedor_devuelve_502(self):
+        with patch("library.views.EmailService") as service_class:
+            service_class.return_value.send_email.side_effect = EmailServiceError
+            respuesta = self._post_json(
+                {"to": "destino@example.com", "subject": "Asunto", "text": "Texto"}
+            )
+
+        self.assertEqual(respuesta.status_code, 502)
+        self.assertEqual(respuesta.json()["error"], "external_service_error")
+
+    @override_settings(DEBUG=False)
+    def test_si_no_hay_debug_devuelve_404(self):
+        respuesta = self._post_json(
+            {"to": "destino@example.com", "subject": "Asunto", "text": "Texto"}
+        )
+
+        self.assertEqual(respuesta.status_code, 404)
+
+
+@override_settings(
+    MAILEROO_API_KEY="test-key",
+    MAILEROO_FROM_ADDRESS="sender@example.com",
+    MAILEROO_FROM_NAME="Nexus Play",
+    MAILEROO_API_URL="https://smtp.maileroo.com/api/v2/emails",
+    MAILEROO_TIMEOUT=1,
+)
+class PruebasRegistroConEmail(TestCase):
+    ruta = "/api/auth/register/"
+
+    def _post_json(self, datos):
+        return self.client.post(
+            self.ruta,
+            data=json.dumps(datos),
+            content_type="application/json",
+        )
+
+    def test_registro_requiere_email(self):
+        respuesta = self._post_json(
+            {"username": "nuevo", "password": "password123"}
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["error"], "validation_error")
+        self.assertEqual(respuesta.json()["details"]["email"], "Campo obligatorio.")
+
+    def test_registro_valida_formato_email(self):
+        respuesta = self._post_json(
+            {"username": "nuevo", "password": "password123", "email": "sin-arroba"}
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["error"], "validation_error")
+        self.assertEqual(
+            respuesta.json()["details"]["email"],
+            "Debe tener un formato valido.",
+        )
+
+    def test_registro_correcto_envia_bienvenida_y_devuelve_email(self):
+        fake_response = FakeEmailResponse(
+            '{"success": true, "data": {"reference_id": "welcome-1"}}'
+        )
+
+        with patch("library.email_service.urllib.request.urlopen", return_value=fake_response):
+            with self.assertLogs("library.email_service", level="INFO") as logs:
+                respuesta = self._post_json(
+                    {
+                        "username": "nuevo",
+                        "password": "password123",
+                        "email": "nuevo@example.com",
+                    }
+                )
+
+        self.assertEqual(respuesta.status_code, 201)
+        self.assertEqual(respuesta.json()["email"], "nuevo@example.com")
+        self.assertIn("register_welcome", "\n".join(logs.output))
+        User = get_user_model()
+        self.assertTrue(User.objects.filter(username="nuevo").exists())
+
+    def test_registro_crea_usuario_aunque_falle_el_email(self):
+        with override_settings(MAILEROO_API_KEY=""):
+            with self.assertLogs("library.email_service", level="ERROR") as logs:
+                respuesta = self._post_json(
+                    {
+                        "username": "nuevo",
+                        "password": "password123",
+                        "email": "nuevo@example.com",
+                    }
+                )
+
+        self.assertEqual(respuesta.status_code, 201)
+        self.assertEqual(respuesta.json()["email"], "nuevo@example.com")
+        self.assertIn("register_welcome", "\n".join(logs.output))
+        self.assertIn("type=configuration", "\n".join(logs.output))

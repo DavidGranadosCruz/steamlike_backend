@@ -1,7 +1,10 @@
 from pathlib import Path
 import os
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 
 def _env(name: str, default: str | None = None) -> str | None:
     return os.environ.get(name, default)
@@ -16,6 +19,15 @@ def _env_csv(name: str, default_csv: str = "") -> list[str]:
     raw = os.environ.get(name, default_csv)
     items = [x.strip() for x in raw.split(",") if x.strip()]
     return items
+
+def _env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
 
 SECRET_KEY = _env("DJANGO_SECRET_KEY", "change-me")
 DEBUG = _env_bool("DJANGO_DEBUG", False)
@@ -116,3 +128,27 @@ CSRF_TRUSTED_ORIGINS = _env_csv("DJANGO_CSRF_TRUSTED_ORIGINS", "http://frontend:
 # Dev defaults for cookies (keep simple; hardening can be done later)
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
+
+# Maileroo Email API
+MAILEROO_API_URL = _env("MAILEROO_API_URL", "https://smtp.maileroo.com/api/v2/emails")
+MAILEROO_API_KEY = _env("MAILEROO_API_KEY", "")
+MAILEROO_FROM_ADDRESS = _env("MAILEROO_FROM_ADDRESS", "")
+MAILEROO_FROM_NAME = _env("MAILEROO_FROM_NAME", "Nexus Play")
+MAILEROO_TIMEOUT = _env_float("MAILEROO_TIMEOUT", 5.0)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "loggers": {
+        "library.email_service": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}

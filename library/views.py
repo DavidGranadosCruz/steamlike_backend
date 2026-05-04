@@ -1,16 +1,32 @@
 import json
+import socket
 import urllib.request
 import urllib.parse
 import urllib.error
 
+from django.conf import settings
 from django.contrib.auth import get_user_model, authenticate, login, logout, update_session_auth_hash
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 
 from django.db import IntegrityError, transaction
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, Http404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods
 
+from .email_service import EmailService, EmailServiceError, EmailServiceUnavailable
 from .models import LibraryEntry
+
+
+CHEAPSHARK_BASE_URL = "https://www.cheapshark.com/api/1.0/games"
+
+
+class CatalogServiceUnavailable(Exception):
+    pass
+
+
+class CatalogServiceError(Exception):
+    pass
 
 
 @require_GET
@@ -94,6 +110,22 @@ def error_servicio_externo():
         }, status=502
     )
 
+def error_email_no_disponible():
+    return JsonResponse(
+        {
+            "error": "external_service_unavailable",
+            "message": "El servicio de email no está disponible. Inténtalo más tarde."
+        }, status=503
+    )
+
+def error_email_externo():
+    return JsonResponse(
+        {
+            "error": "external_service_error",
+            "message": "Error al consultar el servicio de email."
+        }, status=502
+    )
+
 def error_id_externo_invalido():
     return JsonResponse(
         {
@@ -117,6 +149,35 @@ def leer_json(request):
 
     
 
+def email_valido(email):
+    try:
+        validate_email(email)
+    except ValidationError:
+        return False
+    return True
+
+
+def enviar_email_bienvenida(user):
+    subject = "Bienvenido a Nexus Play"
+    text = (
+        f"Hola {user.username},\n\n"
+        "Tu cuenta se ha creado correctamente en Nexus Play.\n"
+        "Ya puedes buscar juegos y añadirlos a tu biblioteca.\n"
+    )
+    html = (
+        f"<p>Hola {user.username},</p>"
+        "<p>Tu cuenta se ha creado correctamente en Nexus Play.</p>"
+        "<p>Ya puedes buscar juegos y añadirlos a tu biblioteca.</p>"
+    )
+    EmailService().send_email(
+        to=user.email,
+        subject=subject,
+        text=text,
+        html=html,
+        action="register_welcome",
+        user=user,
+    )
+
 
 # Ejercicio 3
 def buscar_entrada(entry_id):
@@ -125,6 +186,82 @@ def buscar_entrada(entry_id):
         return LibraryEntry.objects.get(id=entry_id)
     except LibraryEntry.DoesNotExist:
         return None
+
+
+def consultar_cheapshark(params):
+    query = urllib.parse.urlencode(params, safe=",")
+    url = f"{CHEAPSHARK_BASE_URL}?{query}"
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError:
+        raise CatalogServiceError
+    except (urllib.error.URLError, TimeoutError, socket.timeout, OSError):
+        raise CatalogServiceUnavailable
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise CatalogServiceError
+    except Exception:
+        raise CatalogServiceError
+
+
+def consultar_cheapshark_por_ids(external_game_ids):
+    data = consultar_cheapshark({"ids": ",".join(external_game_ids)})
+
+    if not isinstance(data, dict):
+        raise CatalogServiceError
+
+    return data
+
+
+def juego_resuelto(gid, game):
+    if not isinstance(game, dict):
+        raise CatalogServiceError
+
+    info = game.get("info")
+    if not isinstance(info, dict):
+        raise CatalogServiceError
+
+    title = info.get("title")
+    thumb = info.get("thumb", "")
+    if not isinstance(title, str) or not isinstance(thumb, str):
+        raise CatalogServiceError
+
+    return {
+        "external_game_id": gid,
+        "title": title,
+        "thumb": thumb,
+    }
+
+
+def external_game_id_existe(external_game_id):
+    url = f"{CHEAPSHARK_BASE_URL}?ids={urllib.parse.quote(external_game_id)}"
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return False
+        raise CatalogServiceError
+    except (urllib.error.URLError, TimeoutError, socket.timeout, OSError):
+        raise CatalogServiceUnavailable
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise CatalogServiceError
+    except Exception:
+        raise CatalogServiceError
+
+    if not isinstance(data, dict):
+        raise CatalogServiceError
+
+    game = data.get(external_game_id)
+    if game is None:
+        return False
+
+    juego_resuelto(external_game_id, game)
+    return True
 
 
 @require_GET
@@ -171,6 +308,8 @@ def crear_entrada_biblioteca(request):
         details["external_game_id"] = "Campo obligatorio."
     elif not isinstance(data["external_game_id"], str):
         details["external_game_id"] = "Debe ser string."
+    elif not data["external_game_id"].strip():
+        details["external_game_id"] = "No puede estar vacio."
 
     if "status" not in data:
         details["status"] = "Campo obligatorio."
@@ -189,22 +328,16 @@ def crear_entrada_biblioteca(request):
     if details:
         return error_validacion(details)
 
-    # Ejercicio 4: validacion externa en POST /api/library/entries/
-    url = f"https://www.cheapshark.com/api/1.0/games?ids={urllib.parse.quote(data['external_game_id'])}"
+    data["external_game_id"] = data["external_game_id"].strip()
+
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            external_data = json.loads(response.read().decode())
-    except urllib.error.HTTPError as e:
-        if e.code in [400, 404]:
-            return error_id_externo_invalido()
-        return error_servicio_externo()
-    except urllib.error.URLError:
+        existe = external_game_id_existe(data["external_game_id"])
+    except CatalogServiceUnavailable:
         return error_servicio_no_disponible()
-    except Exception:
+    except CatalogServiceError:
         return error_servicio_externo()
 
-    if not external_data or data["external_game_id"] not in external_data:
+    if not existe:
         return error_id_externo_invalido()
 
     try:
@@ -380,9 +513,19 @@ def registrar_usuario(request):
     elif len(data["password"]) < 8:
         details["password"] = "La contraseña debe tener mínimo 8 caracteres."
 
+    if "email" not in data:
+        details["email"] = "Campo obligatorio."
+    elif not isinstance(data["email"], str):
+        details["email"] = "Debe ser string."
+    elif not data["email"].strip():
+        details["email"] = "No puede estar vacio."
+    elif not email_valido(data["email"].strip()):
+        details["email"] = "Debe tener un formato valido."
+
     if details:
         return error_validacion(details)
 
+    email = data["email"].strip()
     User = get_user_model()
     # Comprobar si existe el usuario y uso objects.filter() para obtener el usuario
     if User.objects.filter(username=data["username"]).exists():
@@ -390,10 +533,19 @@ def registrar_usuario(request):
 
     user = User.objects.create_user(
         username=data["username"],
-        password=data["password"]
+        password=data["password"],
+        email=email,
     )
 
-    return JsonResponse({"id": user.id, "username": user.username}, status=201)
+    try:
+        enviar_email_bienvenida(user)
+    except (EmailServiceUnavailable, EmailServiceError):
+        pass
+
+    return JsonResponse(
+        {"id": user.id, "username": user.username, "email": user.email},
+        status=201,
+    )
 
 
 @csrf_exempt
@@ -494,6 +646,49 @@ def cerrar_sesion(request):
     return HttpResponse(status=204)
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def debug_email_test(request):
+    if not settings.DEBUG:
+        raise Http404()
+
+    data = leer_json(request)
+    if data is None:
+        return error_validacion({"body": "JSON mal formado."})
+
+    if not isinstance(data, dict):
+        return error_validacion({"body": "El JSON debe ser un objeto."})
+
+    if data == {}:
+        return error_validacion({"body": "El JSON no puede estar vacio."})
+
+    details = {}
+    for field in ("to", "subject", "text"):
+        if field not in data:
+            details[field] = "Campo obligatorio."
+        elif not isinstance(data[field], str):
+            details[field] = "Debe ser string."
+        elif not data[field].strip():
+            details[field] = "No puede estar vacio."
+
+    if details:
+        return error_validacion(details)
+
+    try:
+        EmailService().send_email(
+            to=data["to"].strip(),
+            subject=data["subject"].strip(),
+            text=data["text"].strip(),
+            action="send_email",
+        )
+    except EmailServiceUnavailable:
+        return error_email_no_disponible()
+    except EmailServiceError:
+        return error_email_externo()
+
+    return JsonResponse({"ok": True}, status=200)
+
+
 # Ejercicio 2 semana 4
 @require_GET
 def buscar_catalogo(request):
@@ -501,25 +696,31 @@ def buscar_catalogo(request):
     if not q:
         return error_validacion({"q": "Parámetro obligatorio y no vacío."})
 
-    url = f"https://www.cheapshark.com/api/1.0/games?title={urllib.parse.quote(q)}"
-    
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode())
-    except urllib.error.HTTPError:
-        return error_servicio_externo()
-    except urllib.error.URLError:
+        data = consultar_cheapshark({"title": q})
+    except CatalogServiceUnavailable:
         return error_servicio_no_disponible()
-    except Exception:
+    except CatalogServiceError:
+        return error_servicio_externo()
+
+    if not isinstance(data, list):
         return error_servicio_externo()
 
     resultados = []
     for game in data:
+        if not isinstance(game, dict):
+            return error_servicio_externo()
+
+        game_id = game.get("gameID")
+        title = game.get("external")
+        thumb = game.get("thumb", "")
+        if not isinstance(game_id, str) or not isinstance(title, str) or not isinstance(thumb, str):
+            return error_servicio_externo()
+
         resultados.append({
-            "external_game_id": game.get("gameID", ""),
-            "title": game.get("external", ""),
-            "thumb": game.get("thumb", "")
+            "external_game_id": game_id,
+            "title": title,
+            "thumb": thumb
         })
 
     return JsonResponse(resultados, safe=False, status=200)
@@ -535,37 +736,29 @@ def resolver_catalogo(request):
     external_game_ids = data.get("external_game_ids")
     if not isinstance(external_game_ids, list) or len(external_game_ids) == 0:
         return error_validacion({"external_game_ids": "Debe ser una lista no vacía."})
-        
-    # Verificar que todos los items son strings
-    for gid in external_game_ids:
-        if not isinstance(gid, str):
-            return error_validacion({"external_game_ids": "Todos los elementos deben ser strings."})
 
-    ids_str = ",".join(urllib.parse.quote(gid) for gid in external_game_ids)
-    url = f"https://www.cheapshark.com/api/1.0/games?ids={ids_str}"
-    
+    ids_limpios = []
+    for gid in external_game_ids:
+        if not isinstance(gid, str) or not gid.strip():
+            return error_validacion({"external_game_ids": "Todos los elementos deben ser strings no vacíos."})
+        ids_limpios.append(gid.strip())
+
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            external_data = json.loads(response.read().decode())
-    except urllib.error.HTTPError:
-        return error_servicio_externo()
-    except urllib.error.URLError:
+        external_data = consultar_cheapshark_por_ids(ids_limpios)
+    except CatalogServiceUnavailable:
         return error_servicio_no_disponible()
-    except Exception:
+    except CatalogServiceError:
         return error_servicio_externo()
 
     resultados = []
-    # Recorremos los IDs recibidos para mantener un orden predecible
-    # y porque el diccionario de respuesta usa los IDs como claves
-    for gid in external_game_ids:
+    for gid in ids_limpios:
         game = external_data.get(gid)
-        if game and isinstance(game, dict) and "info" in game:
-            resultados.append({
-                "external_game_id": gid,
-                "title": game["info"].get("title", ""),
-                "thumb": game["info"].get("thumb", "")
-            })
+        if game is None:
+            continue
+        try:
+            resultados.append(juego_resuelto(gid, game))
+        except CatalogServiceError:
+            return error_servicio_externo()
 
     return JsonResponse(resultados, safe=False, status=200)
 

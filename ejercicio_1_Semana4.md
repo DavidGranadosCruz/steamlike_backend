@@ -1,38 +1,89 @@
+# Ejercicio 1 - Integración del catálogo CheapShark
 
-## 1. Implementación de Consultas (Endpoints)
+## Endpoints de CheapShark que se usan
 
-Para garantizar una experiencia de usuario fluida en nuestro catálogo, hemos elegido los puntos de acceso más eficientes de la API de CheapShark:
+La documentación pública de CheapShark indica que el recurso principal para juegos es:
 
-* **Búsqueda dinámica por título:** Utilizaremos el endpoint /games con el parámetro title. Esto nos permite realizar búsquedas bajo demanda según lo que el usuario escriba, obteniendo resultados en tiempo real.
-    * **Ejemplo de consulta:** GET https://www.cheapshark.com/api/1.0/games?title=batman
-* **Recuperación de juegos por ID:** Para gestionar la biblioteca personalizada del usuario, consultaremos el mismo endpoint /games pero utilizando el parámetro ids. Esto nos permite recuperar la información actualizada de varios juegos simultáneamente (separados por comas) basándonos en el gameID que hayamos almacenado previamente.
-    * **Ejemplo de consulta:** GET https://www.cheapshark.com/api/1.0/games?ids=128,129,130
+```text
+GET https://www.cheapshark.com/api/1.0/games
+```
 
-## 2. Seguridad y Normas de Uso
+Para buscar juegos por texto se usa el parámetro `title`:
 
-Uno de los puntos clave de CheapShark es que ofrece una API pública, lo que significa que **no requiere tokens de acceso ni claves privadas**. Sin embargo, esto implica una responsabilidad en su uso:
+```text
+GET https://www.cheapshark.com/api/1.0/games?title=batman
+```
 
-* **Respeto al Rate Limiting:** La API está optimizada para interacciones directas del usuario. Las políticas de CheapShark prohíben explícitamente el "scraping" masivo o el almacenamiento de su base de datos completa. Un uso abusivo o automatizado podría resultar en el bloqueo permanente de nuestra IP. Por ello, nuestra arquitectura está diseñada para consultar solo lo necesario en el momento justo.
+La respuesta es una lista de juegos. Para nuestro backend interesan solo estos campos:
 
-## 3. Estrategia Arquitectónica y Decisiones de Diseño
+- `gameID`: identificador externo del juego.
+- `external`: título del juego.
+- `thumb`: miniatura.
 
-Hemos definido una serie de principios para que nuestra aplicación sea escalable, rápida y segura:
+Para consultar varios juegos por ID se usa el parámetro `ids`, con los `gameID` separados por comas:
 
-### Gestión de Identificadores
-Cuando un usuario añade un juego a su lista, no duplicamos toda la información. Simplemente guardamos un `external_game_id` vinculado al `gameID` de CheapShark. Esto garantiza que nuestra base de datos sea ligera y que siempre podamos referenciar el origen exacto de los datos.
+```text
+GET https://www.cheapshark.com/api/1.0/games?ids=128,129,130
+```
 
-### Optimización del Flujo de Datos (Backend a Frontend)
-Aunque la API externa nos entregue mucha información, nuestro backend solo enviará al frontend lo estrictamente necesario (ID, título, imagen y precio). Esto lo hacemos por tres motivos principales:
+La respuesta es un objeto cuyas claves son los IDs solicitados. Dentro de cada juego se usa `info.title` y `info.thumb`.
 
-1.  **Velocidad:** Menos datos equivalen a respuestas más rápidas, algo vital para usuarios en dispositivos móviles.
-2.  **Consistencia:** Al filtrar los datos en el backend, el frontend siempre recibe el mismo formato, independientemente de si CheapShark decide cambiar su estructura interna en el futuro.
-3.  **Arquitectura Limpia:** Aplicamos el patrón **BFF (Backend For Frontend)**, donde nuestro servidor actúa como un filtro inteligente que adapta los datos brutos a las necesidades específicas de nuestra interfaz.
+## Autenticación y aspectos relevantes
 
+CheapShark ofrece una API pública y no requiere API key ni token para estas consultas.
 
+Aun así, el backend debe tratarla como un proveedor externo:
 
-### ¿Por qué no guardamos el catálogo en nuestra propia base de datos?
-Mantener una copia local del catálogo de CheapShark sería contraproducente por las siguientes razones:
+- Puede no responder por timeout o error de red.
+- Puede responder con un error HTTP.
+- Puede devolver datos con un formato inesperado.
+- No se debe exponer al frontend la respuesta cruda ni errores internos del proveedor.
 
-* **Información en tiempo real:** Los precios y ofertas de los juegos son extremadamente volátiles. Tener una base de datos local nos obligaría a realizar sincronizaciones constantes (procesos pesados de tipo cron) que rara vez estarían al día.
-* **Eficiencia de recursos:** El catálogo global es inmenso. Delegar el almacenamiento y la indexación a un servicio especializado como CheapShark nos permite centrar nuestra infraestructura en lo que realmente importa: la experiencia de nuestros usuarios.
-* **Simplicidad operativa:** Al consultar bajo demanda, nos aseguramos de que el usuario siempre vea el precio "fresco" y las ofertas vigentes sin que nosotros tengamos que gestionar el mantenimiento técnico de esa enorme masa de datos.
+Por eso el backend traduce esos casos a JSON estable:
+
+- `503 external_service_unavailable` si no hay respuesta.
+- `502 external_service_error` si el proveedor responde con error o datos inválidos.
+- `400 invalid_external_game_id` si el ID usado al crear una entrada de biblioteca no existe.
+
+## Uso de `external_game_id`
+
+En nuestra base de datos no se guarda el juego completo. Solo se guarda:
+
+```text
+external_game_id = gameID de CheapShark
+```
+
+Ese valor permite relacionar una entrada de nuestra biblioteca con un juego del catálogo externo.
+
+## Por qué el frontend recibe información mínima
+
+El backend solo devuelve:
+
+```json
+{
+  "external_game_id": "128",
+  "title": "Game title",
+  "thumb": "https://..."
+}
+```
+
+Esto mantiene un contrato estable entre frontend y backend. CheapShark puede devolver muchos más campos, pero el frontend no los necesita para buscar juegos o mostrar una biblioteca enriquecida. Al filtrar la respuesta en el backend:
+
+- Se reduce el tamaño de la respuesta.
+- Se evita acoplar el frontend a la estructura interna de CheapShark.
+- Se controla qué información externa se expone.
+
+## Por qué el catálogo no se guarda en nuestra base de datos
+
+El catálogo no pertenece a nuestra aplicación. Guardarlo completo duplicaría datos externos y obligaría a mantenerlos sincronizados.
+
+La base de datos del sistema debe almacenar solo información propia de la aplicación: usuarios, entradas de biblioteca, estado y horas jugadas. El título y la miniatura se consultan bajo demanda al catálogo externo cuando hacen falta.
+
+## Resumen para explicar en clase
+
+Nuestro backend actúa como intermediario entre el frontend y CheapShark. El frontend nunca llama directamente a CheapShark. Para buscar se usa `/games?title=...`; para resolver varios IDs se usa `/games?ids=...`. En la biblioteca solo guardamos el `gameID` como `external_game_id`, y cuando necesitamos mostrar título o miniatura se llama al endpoint `resolve`.
+
+Fuentes:
+
+- [CheapShark API docs](https://apidocs.cheapshark.com/)
+- [CheapShark public Postman workspace](https://www.postman.com/cheapshark/workspace/cheapshark-s-public-workspace/documentation/530355-334a254b-aae7-4450-a352-b573b31403fe)
