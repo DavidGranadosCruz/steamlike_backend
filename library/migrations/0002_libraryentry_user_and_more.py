@@ -9,20 +9,34 @@ def add_user_column_if_needed(apps, schema_editor):
     """Add user_id column only if it doesn't already exist (safe for production)."""
     connection = schema_editor.connection
     with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'library_libraryentry' AND column_name = 'user_id'"
-        )
-        if not cursor.fetchone():
+        if connection.vendor == 'sqlite':
+            cursor.execute("PRAGMA table_info(library_libraryentry)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'user_id' not in columns:
+                cursor.execute(
+                    'ALTER TABLE "library_libraryentry" '
+                    'ADD COLUMN "user_id" integer NULL '
+                    'REFERENCES "auth_user" ("id") DEFERRABLE INITIALLY DEFERRED'
+                )
+                cursor.execute(
+                    'CREATE INDEX "library_libraryentry_user_id_idx" '
+                    'ON "library_libraryentry" ("user_id")'
+                )
+        else:
             cursor.execute(
-                'ALTER TABLE "library_libraryentry" '
-                'ADD COLUMN "user_id" integer NULL '
-                'REFERENCES "auth_user" ("id") DEFERRABLE INITIALLY DEFERRED'
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'library_libraryentry' AND column_name = 'user_id'"
             )
-            cursor.execute(
-                'CREATE INDEX "library_libraryentry_user_id_idx" '
-                'ON "library_libraryentry" ("user_id")'
-            )
+            if not cursor.fetchone():
+                cursor.execute(
+                    'ALTER TABLE "library_libraryentry" '
+                    'ADD COLUMN "user_id" integer NULL '
+                    'REFERENCES "auth_user" ("id") DEFERRABLE INITIALLY DEFERRED'
+                )
+                cursor.execute(
+                    'CREATE INDEX "library_libraryentry_user_id_idx" '
+                    'ON "library_libraryentry" ("user_id")'
+                )
 
 
 class Migration(migrations.Migration):

@@ -135,7 +135,10 @@ class PruebasApiActualizarEntradaBiblioteca(TestCase):
 
     def setUp(self):
         # Aqui creo una entrada base para probar PATCH.
+        self.user = User.objects.create_user(username="testuser_patch", password="password123")
+        self.client.force_login(self.user)
         self.entrada = LibraryEntry.objects.create(
+            user=self.user,
             external_game_id="steam-patch-1",
             status="wishlist",
             hours_played=0,
