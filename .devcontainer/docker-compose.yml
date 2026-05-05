@@ -1,0 +1,42 @@
+# ── Dev Container: Compose para entorno de desarrollo ──
+services:
+  # ── PostgreSQL ──
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: steamlike
+      POSTGRES_USER: steamlike
+      POSTGRES_PASSWORD: steamlike
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # ── Backend Django (contenedor principal de desarrollo) ──
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    depends_on:
+      - db
+    volumes:
+      - ..:/app:cached
+    ports:
+      - "8000:8000"
+    # Mantener el contenedor vivo para VS Code
+    command: sleep infinity
+
+  # ── Frontend ──
+  frontend:
+    image: javier08877/steamlike:2.0
+    ports:
+      - "3000:80"
+    depends_on:
+      - app
+
+volumes:
+  postgres_data:

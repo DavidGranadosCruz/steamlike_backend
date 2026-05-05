@@ -1,27 +1,57 @@
+// ── Dev Container: configuración para VS Code ──
+// Cualquier miembro del equipo puede clonar el repo y ejecutar el proyecto
+// sin escribir un solo comando gracias a esta configuración.
 {
-  "name": "Nexus Play – Backend Dev",
-  "dockerComposeFile": "../docker-compose.yml",
-  "service": "web",
+  "name": "Steamlike Backend – Dev Container",
+
+  // ── Orquestación con Docker Compose ──
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
   "workspaceFolder": "/app",
 
+  // ── Características adicionales del contenedor ──
   "features": {
     "ghcr.io/devcontainers/features/git:1": {}
   },
 
+  // ── Extensiones de VS Code recomendadas ──
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-python.python",
-        "ms-python.vscode-pylance"
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "ms-python.pylint",
+        "batisteo.vscode-django",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg",
+        "ms-azuretools.vscode-docker"
       ],
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "python.languageServer": "Pylance"
+        "python.languageServer": "Pylance",
+        "python.testing.pytestEnabled": false,
+        "python.testing.unittestEnabled": true,
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.python"
+        }
       }
     }
   },
 
-  "forwardPorts": [8000, 3000],
+  // ── Puertos reenviados automáticamente ──
+  "forwardPorts": [8000, 5432, 3000],
+  "portsAttributes": {
+    "8000": { "label": "Django Backend",  "onAutoForward": "notify" },
+    "5432": { "label": "PostgreSQL",      "onAutoForward": "silent" },
+    "3000": { "label": "Frontend",        "onAutoForward": "notify" }
+  },
 
-  "postCreateCommand": "pip install -r requirements.txt"
+  // ── Comandos post-creación ──
+  // Se ejecutan automáticamente tras crear el contenedor.
+  "postCreateCommand": "pip install -r requirements.txt && python manage.py migrate --no-input",
+
+  // ── Usuario no-root ──
+  "remoteUser": "vscode"
 }
