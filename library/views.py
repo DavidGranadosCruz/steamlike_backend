@@ -1,4 +1,7 @@
 import json
+import urllib.request
+import urllib.parse
+import urllib.error
 
 from django.contrib.auth import get_user_model, authenticate, login, logout
 from django.contrib.auth.models import User
@@ -339,3 +342,25 @@ def usuario_actual(request):
 def cerrar_sesion(request):
     logout(request)
     return JsonResponse({"message": "Sesión cerrada"}, status=200)
+
+
+@require_GET
+def buscar_catalogo(request):
+    query = request.GET.get("q", "").strip()
+    if not query:
+        return JsonResponse([], safe=False)
+
+    url = "https://www.cheapshark.com/api/1.0/deals?" + urllib.parse.urlencode({
+        "title": query,
+        "limit": 10,
+        "sortBy": "Title",
+    })
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "NexusPlay/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+        return JsonResponse(data, safe=False)
+    except (urllib.error.URLError, TimeoutError):
+        return JsonResponse({"error": "external_api_error", "message": "No se pudo contactar con CheapShark"}, status=502)
+
