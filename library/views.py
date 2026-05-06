@@ -1,8 +1,4 @@
 import json
-import socket
-import urllib.request
-import urllib.parse
-import urllib.error
 
 from django.conf import settings
 from django.contrib.auth import get_user_model, authenticate, login, logout, update_session_auth_hash
@@ -14,19 +10,9 @@ from django.http import JsonResponse, HttpResponse, Http404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods
 
+from .catalog_service import CatalogService, CatalogServiceError, CatalogServiceUnavailable
 from .email_service import EmailService, EmailServiceError, EmailServiceUnavailable
 from .models import LibraryEntry
-
-
-CHEAPSHARK_BASE_URL = "https://www.cheapshark.com/api/1.0/games"
-
-
-class CatalogServiceUnavailable(Exception):
-    pass
-
-
-class CatalogServiceError(Exception):
-    pass
 
 
 @require_GET
@@ -188,82 +174,6 @@ def buscar_entrada(entry_id):
         return None
 
 
-def consultar_cheapshark(params):
-    query = urllib.parse.urlencode(params, safe=",")
-    url = f"{CHEAPSHARK_BASE_URL}?{query}"
-
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError:
-        raise CatalogServiceError
-    except (urllib.error.URLError, TimeoutError, socket.timeout, OSError):
-        raise CatalogServiceUnavailable
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        raise CatalogServiceError
-    except Exception:
-        raise CatalogServiceError
-
-
-def consultar_cheapshark_por_ids(external_game_ids):
-    data = consultar_cheapshark({"ids": ",".join(external_game_ids)})
-
-    if not isinstance(data, dict):
-        raise CatalogServiceError
-
-    return data
-
-
-def juego_resuelto(gid, game):
-    if not isinstance(game, dict):
-        raise CatalogServiceError
-
-    info = game.get("info")
-    if not isinstance(info, dict):
-        raise CatalogServiceError
-
-    title = info.get("title")
-    thumb = info.get("thumb", "")
-    if not isinstance(title, str) or not isinstance(thumb, str):
-        raise CatalogServiceError
-
-    return {
-        "external_game_id": gid,
-        "title": title,
-        "thumb": thumb,
-    }
-
-
-def external_game_id_existe(external_game_id):
-    url = f"{CHEAPSHARK_BASE_URL}?ids={urllib.parse.quote(external_game_id)}"
-
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            return False
-        raise CatalogServiceError
-    except (urllib.error.URLError, TimeoutError, socket.timeout, OSError):
-        raise CatalogServiceUnavailable
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        raise CatalogServiceError
-    except Exception:
-        raise CatalogServiceError
-
-    if not isinstance(data, dict):
-        raise CatalogServiceError
-
-    game = data.get(external_game_id)
-    if game is None:
-        return False
-
-    juego_resuelto(external_game_id, game)
-    return True
-
-
 @require_GET
 def listar_entradas_biblioteca(request):
     if not request.user.is_authenticated:
@@ -331,7 +241,7 @@ def crear_entrada_biblioteca(request):
     data["external_game_id"] = data["external_game_id"].strip()
 
     try:
-        existe = external_game_id_existe(data["external_game_id"])
+        existe = CatalogService().external_game_id_exists(data["external_game_id"])
     except CatalogServiceUnavailable:
         return error_servicio_no_disponible()
     except CatalogServiceError:
@@ -697,33 +607,13 @@ def buscar_catalogo(request):
         return error_validacion({"q": "Parámetro obligatorio y no vacío."})
 
     try:
-        data = consultar_cheapshark({"title": q})
+        data = CatalogService().search_games(q)
     except CatalogServiceUnavailable:
         return error_servicio_no_disponible()
     except CatalogServiceError:
         return error_servicio_externo()
 
-    if not isinstance(data, list):
-        return error_servicio_externo()
-
-    resultados = []
-    for game in data:
-        if not isinstance(game, dict):
-            return error_servicio_externo()
-
-        game_id = game.get("gameID")
-        title = game.get("external")
-        thumb = game.get("thumb", "")
-        if not isinstance(game_id, str) or not isinstance(title, str) or not isinstance(thumb, str):
-            return error_servicio_externo()
-
-        resultados.append({
-            "external_game_id": game_id,
-            "title": title,
-            "thumb": thumb
-        })
-
-    return JsonResponse(resultados, safe=False, status=200)
+    return JsonResponse(data, safe=False, status=200)
 
 # Ejercicio 3 semana 4
 @csrf_exempt
@@ -744,21 +634,11 @@ def resolver_catalogo(request):
         ids_limpios.append(gid.strip())
 
     try:
-        external_data = consultar_cheapshark_por_ids(ids_limpios)
+        resultados = CatalogService().resolve_games(ids_limpios)
     except CatalogServiceUnavailable:
         return error_servicio_no_disponible()
     except CatalogServiceError:
         return error_servicio_externo()
-
-    resultados = []
-    for gid in ids_limpios:
-        game = external_data.get(gid)
-        if game is None:
-            continue
-        try:
-            resultados.append(juego_resuelto(gid, game))
-        except CatalogServiceError:
-            return error_servicio_externo()
 
     return JsonResponse(resultados, safe=False, status=200)
 

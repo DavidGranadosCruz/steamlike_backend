@@ -5,9 +5,9 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
+from .catalog_service import CatalogService, CatalogServiceError, CatalogServiceUnavailable
 from .email_service import EmailService, EmailServiceError, EmailServiceUnavailable
 from .models import LibraryEntry
-from .views import CatalogServiceError, CatalogServiceUnavailable
 
 
 class PruebasApiCrearEntradaBiblioteca(TestCase):
@@ -22,11 +22,9 @@ class PruebasApiCrearEntradaBiblioteca(TestCase):
             password="testpassword123",
         )
         self.client.force_login(self.usuario)
-        self.catalog_patch = patch(
-            "library.views.external_game_id_existe",
-            return_value=True,
-        )
-        self.catalog_patch.start()
+        self.catalog_patch = patch("library.views.CatalogService")
+        self.catalog_service_class = self.catalog_patch.start()
+        self.catalog_service_class.return_value.external_game_id_exists.return_value = True
         self.addCleanup(self.catalog_patch.stop)
 
     def _postear(self, datos):
@@ -545,7 +543,15 @@ class PruebasCatalogoSemana4(TestCase):
             {"gameID": "1", "external": "Mario Test", "thumb": "https://img.test/1.jpg"}
         ]
 
-        with patch("library.views.consultar_cheapshark", return_value=catalog_response):
+        with patch("library.views.CatalogService") as service_class:
+            service_class.return_value.search_games.return_value = [
+                {
+                    "external_game_id": game["gameID"],
+                    "title": game["external"],
+                    "thumb": game["thumb"],
+                }
+                for game in catalog_response
+            ]
             respuesta = self.client.get(f"{self.ruta_search}?q=mario")
 
         self.assertEqual(respuesta.status_code, 200)
@@ -578,7 +584,21 @@ class PruebasCatalogoSemana4(TestCase):
             "2": {"info": {"title": "Game Two", "thumb": "https://img.test/2.jpg"}},
         }
 
-        with patch("library.views.consultar_cheapshark_por_ids", return_value=catalog_response):
+        expected_response = [
+            {
+                "external_game_id": "1",
+                "title": "Game One",
+                "thumb": "https://img.test/1.jpg",
+            },
+            {
+                "external_game_id": "2",
+                "title": "Game Two",
+                "thumb": "https://img.test/2.jpg",
+            },
+        ]
+
+        with patch("library.views.CatalogService") as service_class:
+            service_class.return_value.resolve_games.return_value = expected_response
             respuesta = self._post_json(
                 self.ruta_resolve,
                 {"external_game_ids": ["1", "2"]},
@@ -587,18 +607,7 @@ class PruebasCatalogoSemana4(TestCase):
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(
             respuesta.json(),
-            [
-                {
-                    "external_game_id": "1",
-                    "title": "Game One",
-                    "thumb": "https://img.test/1.jpg",
-                },
-                {
-                    "external_game_id": "2",
-                    "title": "Game Two",
-                    "thumb": "https://img.test/2.jpg",
-                },
-            ],
+            expected_response,
         )
 
     def test_resolve_con_lista_vacia_devuelve_validation_error(self):
@@ -615,9 +624,9 @@ class PruebasCatalogoSemana4(TestCase):
 
     def test_503_si_no_hay_respuesta_del_catalogo(self):
         with patch(
-            "library.views.consultar_cheapshark",
-            side_effect=CatalogServiceUnavailable,
-        ):
+            "library.views.CatalogService",
+        ) as service_class:
+            service_class.return_value.search_games.side_effect = CatalogServiceUnavailable
             respuesta = self.client.get(f"{self.ruta_search}?q=mario")
 
         self.assertEqual(respuesta.status_code, 503)
@@ -631,9 +640,9 @@ class PruebasCatalogoSemana4(TestCase):
 
     def test_502_si_el_catalogo_responde_datos_invalidos(self):
         with patch(
-            "library.views.consultar_cheapshark_por_ids",
-            side_effect=CatalogServiceError,
-        ):
+            "library.views.CatalogService",
+        ) as service_class:
+            service_class.return_value.resolve_games.side_effect = CatalogServiceError
             respuesta = self._post_json(
                 self.ruta_resolve,
                 {"external_game_ids": ["1"]},
@@ -660,7 +669,8 @@ class PruebasCatalogoSemana4(TestCase):
     def test_post_library_con_id_inexistente_devuelve_invalid_external_game_id(self):
         self.client.force_login(self.usuario)
 
-        with patch("library.views.external_game_id_existe", return_value=False):
+        with patch("library.views.CatalogService") as service_class:
+            service_class.return_value.external_game_id_exists.return_value = False
             respuesta = self._post_json(
                 self.ruta_library,
                 {"external_game_id": "not_found", "status": "wishlist", "hours_played": 0},
@@ -679,21 +689,22 @@ class PruebasCatalogoSemana4(TestCase):
     def test_flujo_completo_search_create_list_resolve(self):
         self.client.force_login(self.usuario)
         search_response = [
-            {"gameID": "flow-1", "external": "Flow Game", "thumb": "https://img.test/flow.jpg"}
+            {"external_game_id": "flow-1", "title": "Flow Game", "thumb": "https://img.test/flow.jpg"}
         ]
-        resolve_response = {
-            "flow-1": {
-                "info": {
-                    "title": "Flow Game",
-                    "thumb": "https://img.test/flow.jpg",
-                }
+        resolve_response = [
+            {
+                "external_game_id": "flow-1",
+                "title": "Flow Game",
+                "thumb": "https://img.test/flow.jpg",
             }
-        }
+        ]
 
-        with patch("library.views.consultar_cheapshark", return_value=search_response):
+        with patch("library.views.CatalogService") as service_class:
+            service_class.return_value.search_games.return_value = search_response
             search = self.client.get(f"{self.ruta_search}?q=mario")
 
-        with patch("library.views.external_game_id_existe", return_value=True):
+        with patch("library.views.CatalogService") as service_class:
+            service_class.return_value.external_game_id_exists.return_value = True
             create = self._post_json(
                 self.ruta_library,
                 {"external_game_id": "flow-1", "status": "wishlist", "hours_played": 0},
@@ -701,7 +712,8 @@ class PruebasCatalogoSemana4(TestCase):
 
         listado = self.client.get(self.ruta_library)
 
-        with patch("library.views.consultar_cheapshark_por_ids", return_value=resolve_response):
+        with patch("library.views.CatalogService") as service_class:
+            service_class.return_value.resolve_games.return_value = resolve_response
             resolve = self._post_json(
                 self.ruta_resolve,
                 {"external_game_ids": ["flow-1"]},
@@ -713,6 +725,76 @@ class PruebasCatalogoSemana4(TestCase):
         self.assertEqual(resolve.status_code, 200)
         self.assertNotIn("title", listado.json()[0])
         self.assertEqual(resolve.json()[0]["title"], "Flow Game")
+
+
+class PruebasCatalogServiceRedis(TestCase):
+    def test_dos_busquedas_iguales_usan_redis_en_la_segunda(self):
+        fake_redis = FakeRedis()
+        service = CatalogService(redis_client=fake_redis, cache_ttl=300, stale_cache_ttl=600)
+        provider_response = [
+            {
+                "external_game_id": "1",
+                "title": "Mario Test",
+                "thumb": "https://img.test/1.jpg",
+            }
+        ]
+
+        with patch.object(
+            service,
+            "_fetch_games_by_title",
+            return_value=provider_response,
+        ) as provider:
+            primera = service.search_games("mario")
+            segunda = service.search_games("mario")
+
+        self.assertEqual(primera, segunda)
+        self.assertEqual(provider.call_count, 1)
+        self.assertIn("catalog:search:mario", fake_redis.data)
+
+    def test_fallo_proveedor_con_cache_stale_devuelve_redis(self):
+        fake_redis = FakeRedis()
+        service = CatalogService(redis_client=fake_redis, cache_ttl=300, stale_cache_ttl=600)
+        cached_response = [
+            {
+                "external_game_id": "1",
+                "title": "Mario Test",
+                "thumb": "https://img.test/1.jpg",
+            }
+        ]
+        fake_redis.data["catalog:search:stale:mario"] = json.dumps(cached_response)
+
+        with patch.object(
+            service,
+            "_fetch_games_by_title",
+            side_effect=CatalogServiceUnavailable,
+        ):
+            with self.assertLogs("library.catalog_service", level="WARNING") as logs:
+                respuesta = service.search_games("mario")
+
+        self.assertEqual(respuesta, cached_response)
+        self.assertIn("redis_fallback_after_provider_error", "\n".join(logs.output))
+
+    def test_fallo_proveedor_sin_cache_propaga_503(self):
+        service = CatalogService(redis_client=FakeRedis())
+
+        with patch.object(
+            service,
+            "_fetch_games_by_title",
+            side_effect=CatalogServiceUnavailable,
+        ):
+            with self.assertRaises(CatalogServiceUnavailable):
+                service.search_games("mario")
+
+    def test_fallo_proveedor_sin_cache_propaga_502(self):
+        service = CatalogService(redis_client=FakeRedis())
+
+        with patch.object(
+            service,
+            "_fetch_games_by_title",
+            side_effect=CatalogServiceError,
+        ):
+            with self.assertRaises(CatalogServiceError):
+                service.search_games("mario")
 
 
 class FakeEmailResponse:
@@ -728,6 +810,21 @@ class FakeEmailResponse:
 
     def read(self):
         return self.body.encode("utf-8")
+
+
+class FakeRedis:
+    def __init__(self):
+        self.data = {}
+        self.setex_calls = []
+        self.get_calls = []
+
+    def get(self, key):
+        self.get_calls.append(key)
+        return self.data.get(key)
+
+    def setex(self, key, ttl, value):
+        self.setex_calls.append((key, ttl, value))
+        self.data[key] = value
 
 
 @override_settings(

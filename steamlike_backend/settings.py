@@ -29,6 +29,15 @@ def _env_float(name: str, default: float) -> float:
     except ValueError:
         return default
 
+def _env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
 SECRET_KEY = _env("DJANGO_SECRET_KEY", "change-me")
 DEBUG = _env_bool("DJANGO_DEBUG", False)
 
@@ -136,6 +145,16 @@ MAILEROO_FROM_ADDRESS = _env("MAILEROO_FROM_ADDRESS", "")
 MAILEROO_FROM_NAME = _env("MAILEROO_FROM_NAME", "Nexus Play")
 MAILEROO_TIMEOUT = _env_float("MAILEROO_TIMEOUT", 5.0)
 
+# Catalog + Redis cache
+CHEAPSHARK_API_URL = _env("CHEAPSHARK_API_URL", "https://www.cheapshark.com/api/1.0/games")
+CHEAPSHARK_TIMEOUT = _env_float("CHEAPSHARK_TIMEOUT", 5.0)
+REDIS_URL = _env("REDIS_URL", "redis://localhost:6379/0")
+CATALOG_SEARCH_CACHE_TTL_SECONDS = _env_int("CATALOG_SEARCH_CACHE_TTL_SECONDS", 300)
+CATALOG_SEARCH_STALE_CACHE_TTL_SECONDS = _env_int(
+    "CATALOG_SEARCH_STALE_CACHE_TTL_SECONDS",
+    86400,
+)
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -146,6 +165,11 @@ LOGGING = {
     },
     "loggers": {
         "library.email_service": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "library.catalog_service": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,

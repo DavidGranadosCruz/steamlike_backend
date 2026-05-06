@@ -75,6 +75,12 @@ Variables para envio de email con Maileroo:
 - `MAILEROO_API_URL`: endpoint de envio, por defecto `https://smtp.maileroo.com/api/v2/emails`.
 - `MAILEROO_TIMEOUT`: timeout en segundos, por defecto `5`.
 
+Variables para catalogo y cache:
+- `REDIS_URL`: conexion Redis. En Docker se usa `redis://redis:6379/0`.
+- `CHEAPSHARK_API_URL`: endpoint de CheapShark. Para simular fallo temporal puedes poner una URL invalida y reiniciar contenedores.
+- `CATALOG_SEARCH_CACHE_TTL_SECONDS`: TTL de busquedas en Redis, por defecto `300`.
+- `CATALOG_SEARCH_STALE_CACHE_TTL_SECONDS`: copia de respaldo para usar Redis si el proveedor falla, por defecto `86400`.
+
 ## Estructura base backend
 
 - `core`: health-check y configuracion base

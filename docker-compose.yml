@@ -11,6 +11,12 @@ services:
     ports:
       - "5432:5432"
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
   web:
     build: .
     restart: unless-stopped
@@ -18,6 +24,9 @@ services:
       - .env
     depends_on:
       - db
+      - redis
+    environment:
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - .:/app
     ports:
