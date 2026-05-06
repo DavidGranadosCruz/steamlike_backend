@@ -1,15 +1,17 @@
 import json
-import urllib.request
-import urllib.parse
-import urllib.error
 
-from django.contrib.auth import get_user_model, authenticate, login, logout
-from django.contrib.auth.models import User
+from django.conf import settings
+from django.contrib.auth import get_user_model, authenticate, login, logout, update_session_auth_hash
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+
 from django.db import IntegrityError, transaction
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse, Http404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods
 
+from .catalog_service import CatalogService, CatalogServiceError, CatalogServiceUnavailable
+from .email_service import EmailService, EmailServiceError, EmailServiceUnavailable
 from .models import LibraryEntry
 
 
@@ -18,6 +20,7 @@ def health(request):
     return JsonResponse({"status": "ok"})
 
 
+# Ejercicio 3
 def serializar_entrada(entrada):
     # Aqui uso un formato unico para create, listado y detalle.
     return {
@@ -28,6 +31,7 @@ def serializar_entrada(entrada):
     }
 
 
+# Ejercicio 3
 def error_validacion(details):
     # Esto ya lo tenia de antes para devolver 400 de validacion.
     return JsonResponse(
@@ -40,6 +44,7 @@ def error_validacion(details):
     )
 
 
+# Ejercicio 3
 def error_duplicado(details):
     # Esto ya lo tenia de antes para el caso de juego duplicado.
     return JsonResponse(
@@ -52,6 +57,7 @@ def error_duplicado(details):
     )
 
 
+# Ejercicio 3
 def error_no_encontrado():
     # Esto lo agregue antes para responder claro cuando el id no existe.
     return JsonResponse(
@@ -61,12 +67,6 @@ def error_no_encontrado():
         },
         status=404,
     )
-
-def error_no_autenticado():
-    return JsonResponse({"error": "unauthorized", "message": "No autenticado"}, status=401)
-
-def error_credenciales():
-    return JsonResponse({"error": "unauthorized", "message": "Credenciales incorrectas"}, status=401)
 
 
 def error_no_autorizado(message="No autenticado."):
@@ -79,8 +79,52 @@ def error_no_autorizado(message="No autenticado."):
     )
 
 
+# Ejercicio 4
+def error_servicio_no_disponible():
+    return JsonResponse(
+        {
+            "error": "external_service_unavailable",
+            "message": "El catálogo externo no está disponible. Inténtalo más tarde."
+        }, status=503
+    )
+
+def error_servicio_externo():
+    return JsonResponse(
+        {
+            "error": "external_service_error",
+            "message": "Error al consultar el catálogo externo."
+        }, status=502
+    )
+
+def error_email_no_disponible():
+    return JsonResponse(
+        {
+            "error": "external_service_unavailable",
+            "message": "El servicio de email no está disponible. Inténtalo más tarde."
+        }, status=503
+    )
+
+def error_email_externo():
+    return JsonResponse(
+        {
+            "error": "external_service_error",
+            "message": "Error al consultar el servicio de email."
+        }, status=502
+    )
+
+def error_id_externo_invalido():
+    return JsonResponse(
+        {
+            "error": "invalid_external_game_id",
+            "message": "El juego indicado no existe en el catálogo externo.",
+            "details": { "external_game_id": "not_found" }
+        }, status=400
+    )
+
+
+# Ejercicio 3
 def leer_json(request):
-    # Leo el body como JSON de forma simple.
+    # Leo el body como JSON de forma simple
     if not request.body:
         return {}
 
@@ -90,6 +134,38 @@ def leer_json(request):
         return None
 
 
+
+def email_valido(email):
+    try:
+        validate_email(email)
+    except ValidationError:
+        return False
+    return True
+
+
+def enviar_email_bienvenida(user):
+    subject = "Bienvenido a Nexus Play"
+    text = (
+        f"Hola {user.username},\n\n"
+        "Tu cuenta se ha creado correctamente en Nexus Play.\n"
+        "Ya puedes buscar juegos y añadirlos a tu biblioteca.\n"
+    )
+    html = (
+        f"<p>Hola {user.username},</p>"
+        "<p>Tu cuenta se ha creado correctamente en Nexus Play.</p>"
+        "<p>Ya puedes buscar juegos y añadirlos a tu biblioteca.</p>"
+    )
+    EmailService().send_email(
+        to=user.email,
+        subject=subject,
+        text=text,
+        html=html,
+        action="register_welcome",
+        user=user,
+    )
+
+
+# Ejercicio 3
 def buscar_entrada(entry_id):
     # Me ahorro repetir la busqueda de id en detalle y patch.
     try:
@@ -109,23 +185,16 @@ def listar_entradas_biblioteca(request):
     return JsonResponse(data, safe=False, status=200)
 
 
-
-
-@csrf_exempt
-@require_http_methods(["GET", "PATCH"])
 def detalle_entrada_biblioteca(request, entry_id):
     if not request.user.is_authenticated:
-        return error_no_autenticado()
-    # Aqui busco una entrada por id para devolver su detalle o modificarla.
-    try:
-        entrada = LibraryEntry.objects.get(id=entry_id, user=request.user)
-    except LibraryEntry.DoesNotExist:
+        return error_no_autorizado()
+
+    # Devuelvo el detalle de una entrada por id.
+    entrada = buscar_entrada(entry_id)
+    if entrada is None or entrada.user != request.user:
         return error_no_encontrado()
 
-    if request.method == "GET":
-        return JsonResponse(serializar_entrada(entrada), status=200)
-    elif request.method == "PATCH":
-        return modificar_entrada_biblioteca(request, entrada)
+    return JsonResponse(serializar_entrada(entrada), status=200)
 
 
 def crear_entrada_biblioteca(request):
@@ -149,6 +218,8 @@ def crear_entrada_biblioteca(request):
         details["external_game_id"] = "Campo obligatorio."
     elif not isinstance(data["external_game_id"], str):
         details["external_game_id"] = "Debe ser string."
+    elif not data["external_game_id"].strip():
+        details["external_game_id"] = "No puede estar vacio."
 
     if "status" not in data:
         details["status"] = "Campo obligatorio."
@@ -167,6 +238,18 @@ def crear_entrada_biblioteca(request):
     if details:
         return error_validacion(details)
 
+    data["external_game_id"] = data["external_game_id"].strip()
+
+    try:
+        existe = CatalogService().external_game_id_exists(data["external_game_id"])
+    except CatalogServiceUnavailable:
+        return error_servicio_no_disponible()
+    except CatalogServiceError:
+        return error_servicio_externo()
+
+    if not existe:
+        return error_id_externo_invalido()
+
     try:
         with transaction.atomic():
             entrada = LibraryEntry.objects.create(
@@ -181,11 +264,12 @@ def crear_entrada_biblioteca(request):
     return JsonResponse(serializar_entrada(entrada), status=201)
 
 
+# Ejercicio 5
 def actualizar_entrada_biblioteca(request, entry_id):
     if not request.user.is_authenticated:
         return error_no_autorizado()
 
-    # Aqui hago el PATCH: solo status y/o hours_played.
+    # Aqui hago el PATCH porque modifico algunos campos
     data = leer_json(request)
     if data is None:
         return error_validacion({"body": "JSON mal formado."})
@@ -232,6 +316,66 @@ def actualizar_entrada_biblioteca(request, entry_id):
     return JsonResponse(serializar_entrada(entrada), status=200)
 
 
+# Ejercicio 4
+def sustituir_entrada_biblioteca(request, entry_id):
+    if not request.user.is_authenticated:
+        return error_no_autorizado()
+
+    # Aqui leo el body como JSON para el PUT
+    data = leer_json(request)
+    if data is None:
+        return error_validacion({"body": "JSON mal formado."})
+
+    if not isinstance(data, dict):
+        return error_validacion({"body": "El JSON debe ser un objeto."})
+
+    if data == {}:
+        return error_validacion({"body": "El JSON no puede estar vacio."})
+
+    # Busco la entrada y verifico si es del usuario autenticado
+    entrada = buscar_entrada(entry_id)
+    if entrada is None or entrada.user != request.user:
+        return error_no_encontrado()
+
+    details = {}
+
+    # Valido que me lleguen todos los campos obligatorios para el PUT
+    if "external_game_id" not in data:
+        details["external_game_id"] = "Campo obligatorio."
+    elif not isinstance(data["external_game_id"], str):
+        details["external_game_id"] = "Debe ser string."
+
+    if "status" not in data:
+        details["status"] = "Campo obligatorio."
+    elif not isinstance(data["status"], str):
+        details["status"] = "Debe ser string."
+    elif data["status"] not in LibraryEntry.ALLOWED_STATUSES:
+        details["status"] = "Debe ser uno de: wishlist, playing, completed, dropped."
+
+    if "hours_played" not in data:
+        details["hours_played"] = "Campo obligatorio."
+    elif isinstance(data["hours_played"], bool) or not isinstance(data["hours_played"], int):
+        details["hours_played"] = "Debe ser integer."
+    elif data["hours_played"] < 0:
+        details["hours_played"] = "Debe ser mayor o igual que 0."
+
+    if details:
+        return error_validacion(details)
+
+    # Sustituyo por completo los valores anteriores
+    entrada.external_game_id = data["external_game_id"]
+    entrada.status = data["status"]
+    entrada.hours_played = data["hours_played"]
+
+    # Intento guardar, capturando un posible error de id externo duplicado
+    try:
+        entrada.save()
+    except IntegrityError:
+        return error_duplicado({"external_game_id": "duplicate"})
+
+    return JsonResponse(serializar_entrada(entrada), status=200)
+
+
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def entradas_biblioteca(request):
@@ -242,11 +386,13 @@ def entradas_biblioteca(request):
 
 
 @csrf_exempt
-@require_http_methods(["GET", "PATCH"])
+@require_http_methods(["GET", "PATCH", "PUT"])
 def entrada_biblioteca_detalle(request, entry_id):
-    # En detalle hago GET para ver y PATCH para actualizar.
+    # En detalle hago GET para ver, PATCH para actualizar y PUT para sustituir.
     if request.method == "GET":
         return detalle_entrada_biblioteca(request, entry_id)
+    elif request.method == "PUT":
+        return sustituir_entrada_biblioteca(request, entry_id)
     return actualizar_entrada_biblioteca(request, entry_id)
 
 
@@ -277,9 +423,19 @@ def registrar_usuario(request):
     elif len(data["password"]) < 8:
         details["password"] = "La contraseña debe tener mínimo 8 caracteres."
 
+    if "email" not in data:
+        details["email"] = "Campo obligatorio."
+    elif not isinstance(data["email"], str):
+        details["email"] = "Debe ser string."
+    elif not data["email"].strip():
+        details["email"] = "No puede estar vacio."
+    elif not email_valido(data["email"].strip()):
+        details["email"] = "Debe tener un formato valido."
+
     if details:
         return error_validacion(details)
 
+    email = data["email"].strip()
     User = get_user_model()
     # Comprobar si existe el usuario y uso objects.filter() para obtener el usuario
     if User.objects.filter(username=data["username"]).exists():
@@ -287,10 +443,19 @@ def registrar_usuario(request):
 
     user = User.objects.create_user(
         username=data["username"],
-        password=data["password"]
+        password=data["password"],
+        email=email,
     )
 
-    return JsonResponse({"id": user.id, "username": user.username}, status=201)
+    try:
+        enviar_email_bienvenida(user)
+    except (EmailServiceUnavailable, EmailServiceError):
+        pass
+
+    return JsonResponse(
+        {"id": user.id, "username": user.username, "email": user.email},
+        status=201,
+    )
 
 
 @csrf_exempt
@@ -336,31 +501,144 @@ def usuario_actual(request):
     else:
         return error_no_autorizado(message="No autenticado")
 
+# Ejercicio 2
+@csrf_exempt
+@require_http_methods(["POST"])
+def cambiar_contraseña(request):
+    if not request.user.is_authenticated:
+        return error_no_autorizado()
 
+    data = leer_json(request)
+    if data is None:
+        return error_validacion({"body": "JSON mal formado."})
+
+    if not isinstance(data, dict):
+        return error_validacion({"body": "El JSON debe ser un objeto."})
+
+    if data == {}:
+        return error_validacion({"body": "El JSON no puede estar vacio."})
+
+    details = {}
+
+    if "current_password" not in data:
+        details["current_password"] = "Campo obligatorio."
+    elif not isinstance(data["current_password"], str):
+        details["current_password"] = "Debe ser string."
+
+    if "new_password" not in data:
+        details["new_password"] = "Campo obligatorio."
+    elif not isinstance(data["new_password"], str):
+        details["new_password"] = "Debe ser string."
+    elif len(data["new_password"]) < 8:
+        details["new_password"] = "La contraseña debe tener mínimo 8 caracteres."
+
+    if details:
+        return error_validacion(details)
+
+    if not request.user.check_password(data["current_password"]):
+        return error_validacion({"current_password": "La contraseña actual es incorrecta."})
+
+    request.user.set_password(data["new_password"])
+    request.user.save()
+
+    update_session_auth_hash(request, request.user)
+
+    return JsonResponse({"ok": True}, status=200)
+
+
+# Ejercicio 6
 @csrf_exempt
 @require_http_methods(["POST"])
 def cerrar_sesion(request):
+    # Si el usuario esta logueado se cierra la sesion, si no, no pasa nada
+    # En ambos casos devolvemos un 204 sin contenido en el body
     logout(request)
-    return JsonResponse({"message": "Sesión cerrada"}, status=200)
+    return HttpResponse(status=204)
 
 
-@require_GET
-def buscar_catalogo(request):
-    query = request.GET.get("q", "").strip()
-    if not query:
-        return JsonResponse([], safe=False)
+@csrf_exempt
+@require_http_methods(["POST"])
+def debug_email_test(request):
+    if not settings.DEBUG:
+        raise Http404()
 
-    url = "https://www.cheapshark.com/api/1.0/deals?" + urllib.parse.urlencode({
-        "title": query,
-        "limit": 10,
-        "sortBy": "Title",
-    })
+    data = leer_json(request)
+    if data is None:
+        return error_validacion({"body": "JSON mal formado."})
+
+    if not isinstance(data, dict):
+        return error_validacion({"body": "El JSON debe ser un objeto."})
+
+    if data == {}:
+        return error_validacion({"body": "El JSON no puede estar vacio."})
+
+    details = {}
+    for field in ("to", "subject", "text"):
+        if field not in data:
+            details[field] = "Campo obligatorio."
+        elif not isinstance(data[field], str):
+            details[field] = "Debe ser string."
+        elif not data[field].strip():
+            details[field] = "No puede estar vacio."
+
+    if details:
+        return error_validacion(details)
 
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "NexusPlay/1.0"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode())
-        return JsonResponse(data, safe=False)
-    except (urllib.error.URLError, TimeoutError):
-        return JsonResponse({"error": "external_api_error", "message": "No se pudo contactar con CheapShark"}, status=502)
+        EmailService().send_email(
+            to=data["to"].strip(),
+            subject=data["subject"].strip(),
+            text=data["text"].strip(),
+            action="send_email",
+        )
+    except EmailServiceUnavailable:
+        return error_email_no_disponible()
+    except EmailServiceError:
+        return error_email_externo()
+
+    return JsonResponse({"ok": True}, status=200)
+
+
+# Ejercicio 2 semana 4
+@require_GET
+def buscar_catalogo(request):
+    q = request.GET.get("q", "").strip()
+    if not q:
+        return error_validacion({"q": "Parámetro obligatorio y no vacío."})
+
+    try:
+        data = CatalogService().search_games(q)
+    except CatalogServiceUnavailable:
+        return error_servicio_no_disponible()
+    except CatalogServiceError:
+        return error_servicio_externo()
+
+    return JsonResponse(data, safe=False, status=200)
+
+# Ejercicio 3 semana 4
+@csrf_exempt
+@require_http_methods(["POST"])
+def resolver_catalogo(request):
+    data = leer_json(request)
+    if data is None or not isinstance(data, dict):
+        return error_validacion({"body": "Se requiere un JSON válido."})
+
+    external_game_ids = data.get("external_game_ids")
+    if not isinstance(external_game_ids, list) or len(external_game_ids) == 0:
+        return error_validacion({"external_game_ids": "Debe ser una lista no vacía."})
+
+    ids_limpios = []
+    for gid in external_game_ids:
+        if not isinstance(gid, str) or not gid.strip():
+            return error_validacion({"external_game_ids": "Todos los elementos deben ser strings no vacíos."})
+        ids_limpios.append(gid.strip())
+
+    try:
+        resultados = CatalogService().resolve_games(ids_limpios)
+    except CatalogServiceUnavailable:
+        return error_servicio_no_disponible()
+    except CatalogServiceError:
+        return error_servicio_externo()
+
+    return JsonResponse(resultados, safe=False, status=200)
 

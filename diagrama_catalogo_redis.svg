@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f2937"/>
+    </marker>
+    <style>
+      .box { fill: #f8fafc; stroke: #1f2937; stroke-width: 2; rx: 10; }
+      .redis { fill: #fff7ed; stroke: #c2410c; }
+      .external { fill: #eef2ff; stroke: #4338ca; }
+      .service { fill: #ecfdf5; stroke: #047857; }
+      .title { font: 700 22px Arial, sans-serif; fill: #111827; }
+      .text { font: 15px Arial, sans-serif; fill: #111827; }
+      .small { font: 13px Arial, sans-serif; fill: #374151; }
+      .arrow { stroke: #1f2937; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .fallback { stroke: #b45309; stroke-width: 2; fill: none; marker-end: url(#arrow); stroke-dasharray: 7 5; }
+    </style>
+  </defs>
+
+  <text x="40" y="45" class="title">Flujo del catalogo con Redis</text>
+
+  <rect x="50" y="110" width="170" height="90" class="box"/>
+  <text x="82" y="145" class="text">Backend</text>
+  <text x="82" y="170" class="small">Vistas Django</text>
+  <text x="82" y="190" class="small">/api/catalog/search</text>
+
+  <rect x="305" y="100" width="210" height="110" class="box service"/>
+  <text x="345" y="138" class="text">CatalogService</text>
+  <text x="335" y="166" class="small">Decide origen de datos</text>
+  <text x="335" y="187" class="small">Normaliza formato JSON</text>
+
+  <rect x="640" y="70" width="210" height="100" class="box redis"/>
+  <text x="700" y="108" class="text">Redis</text>
+  <text x="682" y="136" class="small">Cache con TTL</text>
+  <text x="682" y="157" class="small">catalog:search:q</text>
+
+  <rect x="640" y="260" width="210" height="100" class="box external"/>
+  <text x="682" y="298" class="text">CheapShark</text>
+  <text x="675" y="326" class="small">Servicio externo</text>
+  <text x="675" y="347" class="small">/api/1.0/games</text>
+
+  <path d="M 220 155 L 305 155" class="arrow"/>
+  <text x="232" y="140" class="small">1. q=texto</text>
+
+  <path d="M 515 135 L 640 120" class="arrow"/>
+  <text x="535" y="103" class="small">2. consulta Redis</text>
+
+  <path d="M 640 145 L 515 160" class="arrow"/>
+  <text x="535" y="183" class="small">hit: usa cache</text>
+
+  <path d="M 515 185 L 640 300" class="arrow"/>
+  <text x="532" y="257" class="small">miss: consulta proveedor</text>
+
+  <path d="M 650 340 C 560 405 450 400 410 210" class="arrow"/>
+  <text x="405" y="430" class="small">OK: normaliza respuesta y guarda en Redis</text>
+
+  <path d="M 640 95 C 540 20 375 40 410 100" class="fallback"/>
+  <text x="385" y="75" class="small">fallo proveedor: usa cache si existe</text>
+
+  <path d="M 305 180 L 220 180" class="arrow"/>
+  <text x="228" y="205" class="small">JSON estable</text>
+
+  <rect x="50" y="430" width="800" height="80" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>
+  <text x="70" y="458" class="small">Flujo normal: la vista delega en CatalogService. Si Redis tiene datos, se responde sin llamar a CheapShark.</text>
+  <text x="70" y="482" class="small">Si Redis no tiene datos, CatalogService consulta CheapShark, valida el formato, guarda en Redis con TTL y devuelve el mismo JSON.</text>
+  <text x="70" y="506" class="small">Si CheapShark falla y hay cache de respaldo, se usa Redis; si no hay cache, se devuelve 502 o 503 controlado.</text>
+</svg>

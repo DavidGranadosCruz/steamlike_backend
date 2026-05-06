@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&display=swap');
+
+:root {
+  --font-body: 'Manrope', 'Segoe UI', sans-serif;
+  --font-heading: 'Rajdhani', 'Segoe UI', sans-serif;
+  --text-main: #edf4ff;
+  --text-muted: #96b3dc;
+  --accent: #4bf4d4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--text-main);
+  background:
+    radial-gradient(circle at 15% -10%, rgba(42, 88, 198, 0.45), transparent 40%),
+    radial-gradient(circle at 80% 10%, rgba(22, 149, 167, 0.4), transparent 45%),
+    linear-gradient(160deg, #040812 0%, #091428 35%, #060d1d 100%);
+  background-attachment: fixed;
+  line-height: 1.4;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  width: min(78rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1rem 0 1.8rem;
+}
+
+button {
+  font: inherit;
+}

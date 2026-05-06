@@ -2,7 +2,17 @@ from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import TemplateView
 
-from library.views import health, registrar_usuario, iniciar_sesion, cerrar_sesion, usuario_actual, buscar_catalogo
+from library.views import (
+    buscar_catalogo,
+    cambiar_contraseña,
+    cerrar_sesion,
+    debug_email_test,
+    health,
+    iniciar_sesion,
+    registrar_usuario,
+    resolver_catalogo,
+    usuario_actual,
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -13,8 +23,9 @@ urlpatterns = [
     path("api/auth/login/", iniciar_sesion),
     path("api/auth/logout/", cerrar_sesion),
     path("api/users/me/", usuario_actual),
+    path("api/users/me/password/", cambiar_contraseña),
     path("api/catalog/search/", buscar_catalogo),
-
-    # Frontend — serve at root
+    path("api/catalog/resolve/", resolver_catalogo),
+    path("api/debug/email/test/", debug_email_test),
     path("", TemplateView.as_view(template_name="index.html"), name="frontend"),
 ]
