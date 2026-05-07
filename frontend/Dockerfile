@@ -1,7 +1,9 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 ARG VITE_API_BASE_URL=http://localhost:8000
+ARG VITE_ASSET_BASE=/
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_ASSET_BASE=${VITE_ASSET_BASE}
 
 COPY package*.json ./
 RUN npm ci

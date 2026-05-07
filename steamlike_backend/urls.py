@@ -1,6 +1,7 @@
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
 
+from steamlike_backend.views import frontend_app
 from library.views import (
     buscar_catalogo,
     cambiar_contraseña,
@@ -26,4 +27,6 @@ urlpatterns = [
     path("api/catalog/search/", buscar_catalogo),
     path("api/catalog/resolve/", resolver_catalogo),
     path("api/debug/email/test/", debug_email_test),
+    path("", frontend_app, name="frontend_app"),
+    re_path(r"^(?!api/|admin/|static/).*$", frontend_app, name="frontend_app_spa"),
 ]

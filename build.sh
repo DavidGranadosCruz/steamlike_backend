@@ -5,6 +5,9 @@ set -e
 pip install --upgrade pip
 pip install -r requirements.txt
 
+npm ci --prefix frontend
+npm run build --prefix frontend
+
 # Clean up old conflicting migration record if it exists
 python -c "
 import os, django
