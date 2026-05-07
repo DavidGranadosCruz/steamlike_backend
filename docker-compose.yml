@@ -3,35 +3,38 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-steamlike}
+      POSTGRES_USER: ${POSTGRES_USER:-steamlike}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-steamlike}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
 
   web:
     build: .
     restart: unless-stopped
-    env_file:
-      - .env
     depends_on:
       - db
       - redis
     environment:
-      REDIS_URL: redis://redis:6379/0
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_CORS_ALLOWED_ORIGINS: ${DJANGO_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      POSTGRES_DB: ${POSTGRES_DB:-steamlike}
+      POSTGRES_USER: ${POSTGRES_USER:-steamlike}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-steamlike}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     volumes:
       - .:/app
     ports:
       - "8000:8000"
-    command: python manage.py runserver 0.0.0.0:8000
+    command: sh .devcontainer/scripts/start-dev.sh
 
   frontend:
     build:
@@ -39,6 +42,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: http://localhost:8000
+        VITE_ASSET_BASE: /
     restart: unless-stopped
     ports:
       - "3000:80"

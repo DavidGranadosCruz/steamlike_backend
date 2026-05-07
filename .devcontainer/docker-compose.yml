@@ -1,6 +1,4 @@
-# ── Dev Container: Compose para entorno de desarrollo ──
 services:
-  # ── PostgreSQL ──
   db:
     image: postgres:16
     restart: unless-stopped
@@ -10,33 +8,52 @@ services:
       POSTGRES_PASSWORD: steamlike
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
 
-  # ── Backend Django (contenedor principal de desarrollo) ──
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
   app:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
     restart: unless-stopped
-    env_file:
-      - ../.env
     depends_on:
       - db
+      - redis
+    environment:
+      DJANGO_DEBUG: "true"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,app
+      DJANGO_CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      POSTGRES_DB: steamlike
+      POSTGRES_USER: steamlike
+      POSTGRES_PASSWORD: steamlike
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - ..:/app:cached
     ports:
       - "8000:8000"
-    # Mantener el contenedor vivo para VS Code
-    command: sleep infinity
+    networks:
+      default:
+        aliases:
+          - web
+    command: sh .devcontainer/scripts/start-dev.sh
 
-  # ── Frontend ──
   frontend:
-    image: javier08877/steamlike:2.0
-    ports:
-      - "3000:80"
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
+        VITE_ASSET_BASE: /
+    restart: unless-stopped
     depends_on:
       - app
+    ports:
+      - "3000:80"
 
 volumes:
   postgres_data:

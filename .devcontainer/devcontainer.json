@@ -1,30 +1,15 @@
-// ── Dev Container: configuración para VS Code ──
-// Cualquier miembro del equipo puede clonar el repo y ejecutar el proyecto
-// sin escribir un solo comando gracias a esta configuración.
 {
-  "name": "Steamlike Backend – Dev Container",
-
-  // ── Orquestación con Docker Compose ──
+  "name": "Nexus Play Dev Container",
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
   "workspaceFolder": "/app",
-
-  // ── Características adicionales del contenedor ──
-  "features": {
-    "ghcr.io/devcontainers/features/git:1": {}
-  },
-
-  // ── Extensiones de VS Code recomendadas ──
+  "remoteUser": "vscode",
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "ms-python.debugpy",
-        "ms-python.pylint",
         "batisteo.vscode-django",
-        "mtxr.sqltools",
-        "mtxr.sqltools-driver-pg",
         "ms-azuretools.vscode-docker"
       ],
       "settings": {
@@ -39,19 +24,15 @@
       }
     }
   },
-
-  // ── Puertos reenviados automáticamente ──
-  "forwardPorts": [8000, 5432, 3000],
+  "forwardPorts": [8000, 3000],
   "portsAttributes": {
-    "8000": { "label": "Django Backend",  "onAutoForward": "notify" },
-    "5432": { "label": "PostgreSQL",      "onAutoForward": "silent" },
-    "3000": { "label": "Frontend",        "onAutoForward": "notify" }
-  },
-
-  // ── Comandos post-creación ──
-  // Se ejecutan automáticamente tras crear el contenedor.
-  "postCreateCommand": "pip install -r requirements.txt && python manage.py migrate --no-input",
-
-  // ── Usuario no-root ──
-  "remoteUser": "vscode"
+    "8000": {
+      "label": "Django Backend",
+      "onAutoForward": "notify"
+    },
+    "3000": {
+      "label": "Nexus Frontend",
+      "onAutoForward": "notify"
+    }
+  }
 }
