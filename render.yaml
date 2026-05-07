@@ -21,6 +21,16 @@ services:
         value: "True"
       - key: DJANGO_CSRF_COOKIE_SECURE
         value: "True"
+      - key: MAILEROO_API_KEY
+        sync: false
+      - key: MAILEROO_FROM_ADDRESS
+        value: "david@45f07c6711c75cfe.maileroo.org"
+      - key: MAILEROO_FROM_NAME
+        value: "Nexus Play"
+      - key: MAILEROO_API_URL
+        value: "https://smtp.maileroo.com/api/v2/emails"
+      - key: MAILEROO_TIMEOUT
+        value: "10"
       - key: DATABASE_URL
         fromDatabase:
           name: steamlike-db
