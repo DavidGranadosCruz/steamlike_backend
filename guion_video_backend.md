@@ -1,158 +1,302 @@
-# Guion para video del backend steamlike_backend
+# Guion para video del backend en Render
 
 Duracion objetivo: 3 a 5 minutos.
 
-## Preparacion antes de grabar
+URL de produccion:
 
-1. Abrir VS Code con el repositorio en `main`.
-2. Ejecutar el proyecto:
-
-```bash
-docker compose up --build
+```text
+https://steamlike-backend-1.onrender.com
 ```
 
-3. Tener a mano una herramienta para probar endpoints: navegador, Thunder Client, Postman o terminal con `curl`.
-4. URLs principales:
-   - Backend: `http://localhost:8000`
-   - Frontend: `http://localhost:3000`
-   - Health check: `http://localhost:8000/api/health/`
+## Preparacion antes de grabar
+
+Ten abiertas estas pantallas:
+
+1. Render Dashboard del servicio `steamlike-backend`.
+2. La web publica: `https://steamlike-backend-1.onrender.com/`.
+3. Una herramienta para probar endpoints: Thunder Client, Postman o terminal.
+4. La pagina de logs de Render: servicio `steamlike-backend` > `Logs`.
+
+Si Render esta dormido por el plan gratuito, la primera peticion puede tardar. Espera a que despierte antes de empezar a grabar.
 
 ## Guion narrado
 
 ### 0:00 - 0:20 | Presentacion
 
-"En este video voy a explicar el funcionamiento del backend del proyecto `steamlike_backend`, una aplicacion tipo biblioteca de videojuegos llamada Nexus Play. Voy a mostrar primero que el backend esta en ejecucion, despues un flujo completo de uso con registro, busqueda de juegos y gestion de biblioteca, y por ultimo un caso de error provocado para comprobar como responde el sistema."
+"En este video voy a mostrar el backend del proyecto `steamlike_backend` funcionando desplegado en Render. La aplicacion se llama Nexus Play y permite registrar usuarios, iniciar sesion, buscar juegos en un catalogo externo y gestionar la biblioteca personal de videojuegos."
+
+"Voy a probarlo directamente desde la URL publica de Render, no en local, para demostrar que el despliegue esta funcionando correctamente."
+
+Mostrar en pantalla:
+
+```text
+https://steamlike-backend-1.onrender.com
+```
 
 ### 0:20 - 0:55 | Integracion de ramas
 
-"Antes de probar el backend, el repositorio se ha dejado en un estado estable en la rama `main`. Se revisaron e integraron las ramas de desarrollo del proyecto, incluyendo ramas de semanas anteriores como `dwes-semana1`, `dwes-semana2`, `dwes-semana3`, `optativa-semana1`, `optativa-semana3`, `optativa-semana5` y `devops-semana1`."
+"Antes de probar el backend, el repositorio se dejo estable en la rama `main`. Se integraron las ramas de desarrollo del proyecto: `dwes-semana1`, `dwes-semana2`, `dwes-semana3`, `optativa-semana1`, `optativa-semana3`, `optativa-semana5` y `devops-semana1`."
 
-"Durante la integracion aparecieron conflictos historicos relacionados con migraciones, configuracion de Django, Docker, Redis, frontend y despliegue. En especial, la rama `devops-semana1` estaba desactualizada y habria eliminado funcionalidades actuales como el frontend integrado, Render, Redis, Maileroo y el devcontainer. Por eso se resolvio conservando el estado actual de `main`, que ya contiene las funcionalidades mas recientes y verificadas."
+"Durante la integracion se revisaron conflictos relacionados con migraciones, configuracion de Django, Docker, Redis, frontend, Render y envio de emails. La rama `devops-semana1` era una rama antigua y, si se aceptaban sus cambios directamente, eliminaba funcionalidades actuales como el frontend integrado, la configuracion de Render, Redis, Maileroo y el devcontainer. Por eso se fusiono conservando el estado actual de `main`, que es la version completa y verificada."
 
-"Tras la integracion se comprobaron los tests y el proyecto sigue funcionando correctamente."
+"Despues de la integracion se comprobaron los tests del backend y el proyecto quedo funcionando correctamente."
 
-Mostrar en pantalla:
+Si quieres mostrarlo rapidamente:
 
 ```bash
 git branch --no-merged HEAD
 python manage.py test
 ```
 
-Frase corta:
+Frase:
 
-"La comprobacion final indica que no quedan ramas locales pendientes de fusionar en `main` y que los tests del backend pasan correctamente."
+"La comprobacion muestra que no quedan ramas locales pendientes de fusionar y que los tests automatizados pasan."
 
-### 0:55 - 1:20 | Backend en ejecucion
+### 0:55 - 1:20 | Backend desplegado en Render
 
-"Ahora muestro el backend ejecutandose. El proyecto se puede levantar con Docker, lo que crea los servicios necesarios: Django, PostgreSQL, Redis y el frontend. Django aplica las migraciones y arranca el servidor en el puerto 8000."
+"Ahora compruebo que el backend esta vivo en Render. Primero abro la aplicacion publica. Render esta sirviendo el frontend de Nexus Play desde el mismo servicio Django."
 
-Mostrar:
+Mostrar navegador:
 
-```bash
-docker compose up --build
+```text
+https://steamlike-backend-1.onrender.com/
 ```
 
-Despues probar:
+"Despues pruebo el endpoint de salud del backend."
 
-```bash
-curl http://localhost:8000/api/health/
+Endpoint:
+
+```http
+GET https://steamlike-backend-1.onrender.com/api/health/
 ```
 
-Explicar:
+Resultado esperado:
 
-"El endpoint `/api/health/` devuelve `{\"status\":\"ok\"}`, asi que el backend esta activo y preparado para recibir peticiones."
+```json
+{"status": "ok"}
+```
 
-### 1:20 - 2:45 | Flujo completo de uso
+Frase:
 
-"Voy a realizar un flujo completo de uso del sistema. Primero registro un usuario. El endpoint utilizado es `POST /api/auth/register/`. Envio un nombre de usuario, una contrasena y un correo electronico."
+"Este `200 OK` confirma que el servicio de Render esta levantado y que Django responde correctamente."
 
-Ejemplo:
+### 1:20 - 2:50 | Flujo completo de uso del sistema
+
+"Ahora realizo un flujo completo. Primero registro un usuario nuevo usando el endpoint `POST /api/auth/register/`."
+
+Endpoint:
+
+```http
+POST https://steamlike-backend-1.onrender.com/api/auth/register/
+```
+
+Body recomendado:
 
 ```json
 {
-  "username": "usuario_video",
+  "username": "usuario_video_01",
   "password": "password123",
-  "email": "usuario_video@example.com"
+  "email": "tu_correo_real@example.com"
 }
 ```
 
-"El resultado esperado es una respuesta `201 Created` con el id, username y email del usuario. Internamente, el backend crea el usuario de Django y llama al servicio de email para enviar un mensaje de bienvenida mediante Maileroo, siempre que las variables de entorno esten configuradas."
+Narracion:
 
-"Despues inicio sesion con `POST /api/auth/login/`. Si las credenciales son correctas, el backend crea una sesion y devuelve el usuario autenticado."
+"El resultado esperado es `201 Created`, con el id, username y email del usuario. Internamente el backend valida los datos, crea el usuario en la base de datos PostgreSQL de Render y llama al servicio de Maileroo para enviar el email de bienvenida."
 
-Ejemplo:
+"Despues inicio sesion con el usuario creado."
+
+Endpoint:
+
+```http
+POST https://steamlike-backend-1.onrender.com/api/auth/login/
+```
+
+Body:
 
 ```json
 {
-  "username": "usuario_video",
+  "username": "usuario_video_01",
   "password": "password123"
 }
 ```
 
-"A continuacion consulto el usuario actual con `GET /api/users/me/`. Esta prueba confirma que la sesion esta activa."
+Narracion:
 
-"El siguiente paso es buscar juegos en el catalogo externo. Para eso uso `GET /api/catalog/search/?q=portal`. El backend consulta CheapShark, normaliza la respuesta y devuelve juegos con `external_game_id`, `title` y `thumb`. Ademas, el servicio usa Redis para cachear las busquedas y mejorar el rendimiento."
+"Si las credenciales son correctas, el backend devuelve `200 OK` y crea una sesion. En Postman o Thunder Client se guarda la cookie de sesion, que se utilizara en las siguientes peticiones."
 
-"Con uno de esos identificadores creo una entrada en mi biblioteca usando `POST /api/library/entries/`."
+"Compruebo ahora el usuario autenticado."
 
-Ejemplo:
+Endpoint:
+
+```http
+GET https://steamlike-backend-1.onrender.com/api/users/me/
+```
+
+Resultado esperado:
 
 ```json
 {
-  "external_game_id": "102495",
+  "id": 1,
+  "username": "usuario_video_01"
+}
+```
+
+"El siguiente paso es buscar juegos en el catalogo externo. Uso el endpoint `GET /api/catalog/search/` con la busqueda `portal`."
+
+Endpoint:
+
+```http
+GET https://steamlike-backend-1.onrender.com/api/catalog/search/?q=portal
+```
+
+Resultado real esperado:
+
+```json
+[
+  {
+    "external_game_id": "82",
+    "title": "Portal",
+    "thumb": "https://..."
+  },
+  {
+    "external_game_id": "36",
+    "title": "Portal 2",
+    "thumb": "https://..."
+  }
+]
+```
+
+Narracion:
+
+"Aqui el backend consulta la API externa de CheapShark, normaliza los datos y devuelve una lista simple con id externo, titulo e imagen. Ademas, el servicio tiene cache con Redis para reutilizar busquedas cuando esta disponible."
+
+"Con uno de esos juegos creo una entrada en mi biblioteca."
+
+Endpoint:
+
+```http
+POST https://steamlike-backend-1.onrender.com/api/library/entries/
+```
+
+Body:
+
+```json
+{
+  "external_game_id": "82",
   "status": "playing",
   "hours_played": 3
 }
 ```
 
-"El resultado esperado es `201 Created`. El backend valida que el usuario este autenticado, comprueba que el juego exista en el catalogo externo y guarda la entrada asociada al usuario."
+Narracion:
 
-"Por ultimo consulto `GET /api/library/entries/` para ver la biblioteca del usuario. Debe aparecer la entrada creada con su estado y horas jugadas."
+"El resultado esperado es `201 Created`. El backend comprueba que el usuario esta autenticado, valida que el juego existe en el catalogo externo y guarda la entrada asociada al usuario."
 
-### 2:45 - 3:35 | Caso de error provocado
+"Por ultimo consulto mi biblioteca."
 
-"Ahora provoco un error para comprobar la validacion. Intento crear una entrada incompleta, sin el campo `hours_played`."
+Endpoint:
 
-Ejemplo:
+```http
+GET https://steamlike-backend-1.onrender.com/api/library/entries/
+```
+
+Resultado esperado:
+
+```json
+[
+  {
+    "id": 1,
+    "external_game_id": "82",
+    "status": "playing",
+    "hours_played": 3
+  }
+]
+```
+
+Narracion:
+
+"La respuesta muestra las entradas de la biblioteca del usuario autenticado, por lo que el flujo completo funciona en Render: registro, login, busqueda externa, creacion y listado."
+
+### 2:50 - 3:35 | Caso de error provocado
+
+"Ahora provoco un error para comprobar la validacion del backend. Intento crear una entrada incompleta, sin `hours_played`."
+
+Endpoint:
+
+```http
+POST https://steamlike-backend-1.onrender.com/api/library/entries/
+```
+
+Body incorrecto:
 
 ```json
 {
-  "external_game_id": "102495",
+  "external_game_id": "82",
   "status": "playing"
 }
 ```
 
-"El backend responde con `400 Bad Request` y un JSON de error de validacion. En `details` indica que `hours_played` es un campo obligatorio. Esta respuesta es adecuada porque no permite guardar datos incompletos y explica cual es el problema."
+Resultado esperado:
 
-"Tambien hay otros errores controlados: si no estoy autenticado devuelve `401 unauthorized`; si intento consultar una entrada que no existe devuelve `404 not_found`; y si repito un juego en la misma biblioteca devuelve `duplicate_entry`."
+```json
+{
+  "error": "validation_error",
+  "message": "Datos de entrada invalidos",
+  "details": {
+    "hours_played": "Campo obligatorio."
+  }
+}
+```
 
-### 3:35 - 4:20 | Logs del backend
+Narracion:
 
-"Mientras se ejecutan estas operaciones, el backend genera logs. En las busquedas de catalogo aparecen eventos como `cache_lookup`, `cache_miss`, `provider_request`, `cache_write` y `cache_hit`. Esto permite saber si el resultado vino de Redis o de la API externa."
+"La respuesta correcta es `400 Bad Request`. El backend no guarda datos incompletos y explica claramente que falta el campo `hours_played`."
 
-"En el envio de email aparecen logs como `email intento de envio`, `email envio OK` o errores de configuracion, red o proveedor. Estos registros ayudan a detectar rapidamente si Maileroo esta configurado o si el proveedor devuelve un fallo."
+Puedes mencionar rapidamente otros errores:
 
-"Una mejora posible seria anadir un identificador de peticion para seguir una operacion completa de principio a fin, y registrar el endpoint o metodo HTTP en todos los eventos importantes."
+"Tambien hay otros errores controlados: si no hay sesion devuelve `401 unauthorized`; si el id de entrada no existe devuelve `404 not_found`; si se intenta repetir un juego en la misma biblioteca devuelve `duplicate_entry`; y si el catalogo externo falla, el backend responde con errores controlados `502` o `503`."
 
-### 4:20 - 4:45 | Cierre
+### 3:35 - 4:20 | Logs en Render
 
-"Como comprobacion final, el backend arranca correctamente, las migraciones se aplican, los endpoints principales responden y los tests automatizados pasan. Por tanto, despues de integrar las ramas, el proyecto queda en un estado estable y las funcionalidades principales siguen disponibles: autenticacion, busqueda de juegos, gestion de biblioteca, cache con Redis, validacion de errores y envio de emails de bienvenida mediante Maileroo."
+Mostrar Render Dashboard > servicio `steamlike-backend` > `Logs`.
 
-## Resumen de pruebas mencionadas
+"Ahora reviso los logs del servicio en Render. Aqui se observan las peticiones HTTP que llegan al backend y los mensajes internos de la aplicacion."
 
-| Prueba | Endpoint | Datos enviados | Resultado esperado |
-| --- | --- | --- | --- |
-| Health check | `GET /api/health/` | No aplica | `200 {"status":"ok"}` |
-| Registro | `POST /api/auth/register/` | `username`, `password`, `email` | `201` con usuario creado |
-| Login | `POST /api/auth/login/` | `username`, `password` | `200` con sesion activa |
-| Busqueda catalogo | `GET /api/catalog/search/?q=portal` | Query `q` | Lista de juegos |
-| Crear entrada | `POST /api/library/entries/` | `external_game_id`, `status`, `hours_played` | `201` con entrada creada |
-| Listar biblioteca | `GET /api/library/entries/` | Cookie de sesion | Lista de entradas del usuario |
-| Error validacion | `POST /api/library/entries/` incompleto | Falta `hours_played` | `400 validation_error` |
+"En las busquedas de catalogo aparecen eventos como `cache_lookup`, `cache_miss`, `provider_request`, `cache_write` o `cache_hit`. Estos logs permiten entender si la busqueda se resolvio usando Redis o si se consulto la API externa."
 
-## Maileroo en Render
+"En el registro de usuario, si Maileroo esta configurado, aparecen logs como `email intento de envio` y `email envio OK`. Si falta la configuracion o hay un problema con el proveedor, aparece un log de error indicando si es un fallo de configuracion, red o respuesta del proveedor."
 
-El codigo ya envia email de bienvenida al registrarse un usuario. Para que funcione en Render, el servicio debe tener estas variables de entorno:
+"Estos logs son utiles para detectar problemas, porque permiten seguir que ocurre internamente sin acceder directamente al servidor."
+
+Mejora posible:
+
+"Como mejora, seria util anadir un identificador de peticion para relacionar todos los logs de una misma operacion y registrar siempre el metodo HTTP y el endpoint."
+
+### 4:20 - 4:50 | Cierre
+
+"Como conclusion, el backend funciona correctamente en Render. El servicio responde al health check, permite registrar usuarios, iniciar sesion, buscar juegos en la API externa, crear entradas de biblioteca y controlar errores de validacion."
+
+"Ademas, tras integrar las ramas de desarrollo, los tests siguen pasando y el backend mantiene sus funcionalidades principales: autenticacion, biblioteca de usuario, catalogo externo, cache con Redis, logs y envio de emails con Maileroo."
+
+"Con esto queda comprobado que el proyecto esta desplegado y operativo en un entorno real."
+
+## Pruebas que puedes incluir en el documento
+
+| Prueba | Endpoint en Render | Datos enviados | Resultado esperado | Correcto |
+| --- | --- | --- | --- | --- |
+| Health check | `GET /api/health/` | No aplica | `200 {"status":"ok"}` | Si |
+| Registro | `POST /api/auth/register/` | `username`, `password`, `email` | `201` con usuario creado | Si |
+| Login | `POST /api/auth/login/` | `username`, `password` | `200` con cookie de sesion | Si |
+| Usuario actual | `GET /api/users/me/` | Cookie de sesion | Datos del usuario | Si |
+| Buscar catalogo | `GET /api/catalog/search/?q=portal` | Query `q` | Lista de juegos | Si |
+| Crear biblioteca | `POST /api/library/entries/` | `external_game_id`, `status`, `hours_played` | `201` con entrada creada | Si |
+| Listar biblioteca | `GET /api/library/entries/` | Cookie de sesion | Entradas del usuario | Si |
+| Error provocado | `POST /api/library/entries/` incompleto | Falta `hours_played` | `400 validation_error` | Si |
+
+## Notas para Maileroo en Render
+
+Para que se envie el correo de bienvenida al registrarse en Render, el servicio debe tener estas variables en Render Dashboard > `steamlike-backend` > `Environment`:
 
 ```text
 MAILEROO_API_KEY=<sending-key-de-maileroo>
@@ -162,4 +306,6 @@ MAILEROO_API_URL=https://smtp.maileroo.com/api/v2/emails
 MAILEROO_TIMEOUT=10
 ```
 
-No se debe subir la sending key real al repositorio. Debe guardarse en Render Dashboard, dentro del servicio `steamlike-backend`, en la seccion `Environment`.
+Despues pulsa `Save, rebuild, and deploy`.
+
+La clave real no debe subirse al repositorio. En `render.yaml` solo se deja `MAILEROO_API_KEY` con `sync: false` para indicar que existe, pero el valor se guarda manualmente en Render.
