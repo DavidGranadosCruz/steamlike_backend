@@ -80,7 +80,23 @@ Frase:
 
 "Este `200 OK` confirma que el servicio de Render esta levantado y que Django responde correctamente."
 
-### 1:20 - 2:50 | Flujo completo de uso del sistema
+### 1:20 - 1:55 | Explicacion rapida de partes del codigo
+
+"Antes de probar el flujo completo, voy a comentar por encima como esta organizado el backend. El proyecto esta hecho con Django. El archivo principal de rutas esta en `steamlike_backend/urls.py`. Ahi se conectan las URLs publicas con las funciones que responden a cada endpoint."
+
+"La mayoria de la logica esta en `library/views.py`. Por ejemplo, aqui estan las funciones de registro, login, logout, usuario actual, busqueda de catalogo y gestion de la biblioteca. Estas funciones reciben la peticion, validan los datos y devuelven una respuesta JSON."
+
+"El modelo principal esta en `library/models.py`. La clase `LibraryEntry` representa un juego guardado en la biblioteca de un usuario. Tiene campos como `external_game_id`, `status`, `hours_played` y `user`. Tambien tiene una restriccion para que un mismo usuario no pueda guardar dos veces el mismo juego."
+
+"Para separar responsabilidades, la consulta a CheapShark no esta mezclada directamente en las views, sino en `library/catalog_service.py`. Este servicio se encarga de llamar a la API externa, transformar la respuesta y usar Redis como cache. De forma parecida, el envio de correos esta separado en `library/email_service.py`, que prepara el payload y se comunica con Maileroo."
+
+"Por ultimo, `steamlike_backend/settings.py` contiene la configuracion general: base de datos, CORS, CSRF, archivos estaticos, Redis, Maileroo y logs. Esto permite que el mismo codigo funcione tanto en local como en Render usando variables de entorno."
+
+Frase de cierre:
+
+"En resumen, las rutas mandan la peticion a las views, las views validan y coordinan la accion, los modelos guardan datos en la base de datos y los servicios externos se encargan de CheapShark, Redis y Maileroo."
+
+### 1:55 - 3:10 | Flujo completo de uso del sistema
 
 "Ahora realizo un flujo completo. Primero registro un usuario nuevo usando el endpoint `POST /api/auth/register/`."
 
@@ -218,7 +234,7 @@ Narracion:
 
 "La respuesta muestra las entradas de la biblioteca del usuario autenticado, por lo que el flujo completo funciona en Render: registro, login, busqueda externa, creacion y listado."
 
-### 2:50 - 3:35 | Caso de error provocado
+### 3:10 - 3:45 | Caso de error provocado
 
 "Ahora provoco un error para comprobar la validacion del backend. Intento crear una entrada incompleta, sin `hours_played`."
 
@@ -257,7 +273,7 @@ Puedes mencionar rapidamente otros errores:
 
 "Tambien hay otros errores controlados: si no hay sesion devuelve `401 unauthorized`; si el id de entrada no existe devuelve `404 not_found`; si se intenta repetir un juego en la misma biblioteca devuelve `duplicate_entry`; y si el catalogo externo falla, el backend responde con errores controlados `502` o `503`."
 
-### 3:35 - 4:20 | Logs en Render
+### 3:45 - 4:25 | Logs en Render
 
 Mostrar Render Dashboard > servicio `steamlike-backend` > `Logs`.
 
@@ -273,7 +289,7 @@ Mejora posible:
 
 "Como mejora, seria util anadir un identificador de peticion para relacionar todos los logs de una misma operacion y registrar siempre el metodo HTTP y el endpoint."
 
-### 4:20 - 4:50 | Cierre
+### 4:25 - 4:55 | Cierre
 
 "Como conclusion, el backend funciona correctamente en Render. El servicio responde al health check, permite registrar usuarios, iniciar sesion, buscar juegos en la API externa, crear entradas de biblioteca y controlar errores de validacion."
 
